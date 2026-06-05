@@ -1,0 +1,5 @@
+[package]
+name = "variables_and_types"
+version = "0.1.0"
+edition = "2024"
+description = "变量与类型 - Rust 的变量绑定、标量类型与复合类型"

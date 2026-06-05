@@ -1,0 +1,5 @@
+[package]
+name = "stack_heap_raii"
+version = "0.1.0"
+edition = "2024"
+description = "栈、堆与 RAII - 理解 Rust 的内存基础"

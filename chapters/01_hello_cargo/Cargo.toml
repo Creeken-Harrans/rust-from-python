@@ -1,0 +1,5 @@
+[package]
+name = "hello_cargo"
+version = "0.1.0"
+edition = "2024"
+description = "Hello Cargo - 理解 Rust 工具链与项目结构"

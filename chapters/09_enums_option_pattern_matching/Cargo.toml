@@ -1,0 +1,5 @@
+[package]
+name = "enums_and_patterns"
+version = "0.1.0"
+edition = "2024"
+description = "枚举、Option 与模式匹配 - Rust 的类型安全核心"

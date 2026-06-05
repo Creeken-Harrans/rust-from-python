@@ -1,0 +1,8 @@
+[package]
+name = "guessing_game"
+version = "0.1.0"
+edition = "2024"
+description = "猜数字游戏 - 综合练习阶段 A 知识"
+
+[dependencies]
+rand = "0.8"

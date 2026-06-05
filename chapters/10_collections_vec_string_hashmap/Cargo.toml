@@ -1,0 +1,5 @@
+[package]
+name = "collections"
+version = "0.1.0"
+edition = "2024"
+description = "集合类型 - Vec、String 与 HashMap"

@@ -1,0 +1,5 @@
+[package]
+name = "ownership_move_copy_clone"
+version = "0.1.0"
+edition = "2024"
+description = "所有权、移动与复制 - Rust 最核心的概念"

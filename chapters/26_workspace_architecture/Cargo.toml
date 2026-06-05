@@ -1,0 +1,5 @@
+[package]
+name = "workspace_architecture"
+version = "0.1.0"
+edition = "2024"
+description = "工作空间架构 - 多 Package 项目管理"

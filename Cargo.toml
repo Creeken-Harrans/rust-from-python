@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "chapters/*",
+    "projects/*",
+]
+resolver = "3"
+
+# 教学代码的 lint 设置：放宽部分对教学不重要的 lint
+[workspace.lints.clippy]
+# 教学用宏（如 vec_of_squares!）有意展示 vec::new() + push() 模式
+vec_init_then_push = "allow"
+# 教学代码中硬编码的数学常数用于对比说明
+approx_constant = "allow"
+# 教学代码中的空行用于分隔文档注释和代码块
+empty_line_after_doc_comments = "allow"
+

@@ -1,0 +1,5 @@
+[package]
+name = "lints_and_ci"
+version = "0.1.0"
+edition = "2024"
+description = "代码质量 - Lint、格式化、文档与 CI"

@@ -1,0 +1,5 @@
+[package]
+name = "unsafe_and_ffi"
+version = "0.1.0"
+edition = "2024"
+description = "Unsafe Rust 与 FFI 概述 - 理解 Rust 的安全边界"

@@ -1,0 +1,5 @@
+[package]
+name = "parallel_text_stats"
+version = "0.1.0"
+edition = "2024"
+description = "并行文本统计器 - 综合练习并发知识"

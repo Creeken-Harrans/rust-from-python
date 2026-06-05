@@ -1,0 +1,5 @@
+[package]
+name = "course_orientation"
+version = "0.1.0"
+edition = "2024"
+description = "Rust 课程导览 - 认识 Rust 与系统编程"

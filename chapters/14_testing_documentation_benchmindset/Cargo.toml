@@ -1,0 +1,5 @@
+[package]
+name = "testing_and_docs"
+version = "0.1.0"
+edition = "2024"
+description = "测试与文档 - Rust 的测试文化和文档工具"

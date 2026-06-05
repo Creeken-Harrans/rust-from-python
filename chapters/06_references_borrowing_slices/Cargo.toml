@@ -1,0 +1,5 @@
+[package]
+name = "references_borrowing_slices"
+version = "0.1.0"
+edition = "2024"
+description = "引用、借用与切片 - 在不转移所有权的情况下访问数据"

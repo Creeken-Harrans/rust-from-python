@@ -1,0 +1,5 @@
+[package]
+name = "closures_iterators"
+version = "0.1.0"
+edition = "2024"
+description = "闭包与迭代器 - Rust 的函数式编程工具"

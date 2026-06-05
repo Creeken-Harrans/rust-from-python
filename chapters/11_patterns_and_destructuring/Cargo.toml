@@ -1,0 +1,5 @@
+[package]
+name = "patterns_and_destructuring"
+version = "0.1.0"
+edition = "2024"
+description = "模式与解构 - Rust 模式匹配的完整指南"

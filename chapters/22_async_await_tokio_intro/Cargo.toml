@@ -1,0 +1,8 @@
+[package]
+name = "async_await"
+version = "0.1.0"
+edition = "2021"
+description = "异步编程 - Future、async/await 与 Tokio 入门"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }

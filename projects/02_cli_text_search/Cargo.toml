@@ -1,0 +1,9 @@
+[package]
+name = "cli_text_search"
+version = "0.1.0"
+edition = "2024"
+description = "命令行文本搜索工具 - 综合练习阶段 A-D 知识"
+authors = ["Rust Learner"]
+license = "MIT"
+
+[dependencies]

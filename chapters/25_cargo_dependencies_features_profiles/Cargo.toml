@@ -1,0 +1,25 @@
+[package]
+name = "cargo_features"
+version = "0.1.0"
+edition = "2024"
+description = "Cargo 工程能力 - 依赖、Feature 与 Profile"
+
+[features]
+default = ["basic"]
+basic = []
+advanced = ["basic"]
+json_output = ["serde", "serde_json"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[dev-dependencies]
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+debug = false

@@ -1,0 +1,5 @@
+[package]
+name = "packages_and_modules"
+version = "0.1.0"
+edition = "2024"
+description = "包、箱与模块 - Rust 的代码组织系统"

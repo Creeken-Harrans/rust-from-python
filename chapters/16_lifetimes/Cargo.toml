@@ -1,0 +1,5 @@
+[package]
+name = "lifetimes"
+version = "0.1.0"
+edition = "2024"
+description = "生命周期 - 理解引用有效性的关键"

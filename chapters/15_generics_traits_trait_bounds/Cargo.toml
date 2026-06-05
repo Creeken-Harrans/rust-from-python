@@ -1,0 +1,5 @@
+[package]
+name = "generics_and_traits"
+version = "0.1.0"
+edition = "2024"
+description = "泛型与特征 - Rust 的多态抽象"
