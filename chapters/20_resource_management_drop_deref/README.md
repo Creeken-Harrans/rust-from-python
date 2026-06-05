@@ -605,6 +605,73 @@ impl Drop for BadDesign {
 
 可以看到 Rust 的独特之处在于将 C++ 级别的性能与编译时安全保障相结合，同时提供了比 C++ 更安全、比 GC 语言更可预测的资源管理模型。
 
+### 深入对比：C 手动管理、C++ RAII 与 Rust Drop
+
+#### C 语言：手动资源释放的困境
+
+C 语言中，资源管理完全由程序员手动负责，每个错误路径都必须显式释放已获取的资源：
+
+```c
+FILE *f = fopen("data.txt", "r");
+if (!f) return;                    // 错误路径1
+char *buf = malloc(1024);
+if (!buf) { fclose(f); return; }   // 错误路径2：必须记得关闭 f
+// 正常路径
+free(buf);
+fclose(f);
+```
+
+随着资源数量和错误路径增加，正确性迅速变得不可保证。遗漏任何一条路径的清理都会导致资源泄漏。即便使用 `goto cleanup` 模式集中处理，维护成本依然高昂。
+
+#### C++ 析构函数与 RAII：自动化的第一步
+
+C++ 通过构造/析构函数将资源生命周期绑定到对象作用域，这正是 RAII 的起源：
+
+```cpp
+{
+    std::ifstream file("data.txt");  // 构造：打开文件
+    std::vector<int> data(1000);     // 构造：分配内存
+    // 即使发生异常，析构函数也会自动被调用
+}  // file.close() 和内存释放在此自动执行
+```
+
+C++ 的 RAII 解决了大部分资源泄漏问题，但仍有不足：析构函数可以被显式调用（双重释放风险），移动语义与析构的交互需要开发者小心处理，且缺乏所有权系统对"使用已释放资源"的编译期检查。
+
+#### Rust Drop：对 RAII 的全面完善
+
+Rust 的 `Drop` trait 在 C++ RAII 基础上做了三个关键改进：
+
+1. **禁止手动调用析构函数**：`value.drop()` 是编译错误，杜绝了双重释放的可能性。需要提前结束生命周期时，使用 `std::mem::drop(value)`——这不是析构调用，而是一个接收所有权但函数体为空的函数，通过所有权转移和正常的作用域规则来触发 `Drop`。
+2. **编译期所有权保障**：借用检查器保证资源在使用期间不被释放、释放后不被使用。C++ 中"悬垂引用"问题在 Rust 中被消除。
+3. **Move 语义默认**：Rust 默认移动而非复制，避免了 C++ 中拷贝构造函数意外复制资源句柄的问题。
+
+关于 `std::mem::drop(value)` 的常见误解：它不是"析构函数的别名"，它利用的是 Rust 的基本规则——值被 move 到函数中 → 函数体为空 → 函数结束时值离开作用域 → `Drop` 自动触发。这个优雅的设计完全由所有权系统实现，无需任何语言特例。
+
+### 资源管理不止于内存
+
+Drop trait 管理的"资源"远不止堆内存。任何需要"获取 → 使用 → 释放"生命周期的东西都可以用 RAII 模式统一管理：
+
+| 资源类型 | 获取操作 | Drop 清理 |
+|---------|---------|-----------|
+| 文件描述符 | `File::open()` | 关闭文件 |
+| 互斥锁 | `Mutex::lock()` | 释放锁 |
+| 网络连接 | `TcpStream::connect()` | 关闭 socket |
+| 数据库连接池 | `Pool::connect()` | 归还/断开连接 |
+| 临时文件 | `NamedTempFile::new()` | 删除临时文件 |
+| 度量计时器 | 记录开始时间 | 计算并输出耗时 |
+
+将资源统一为 RAII 模式的最大价值在于**与错误处理的无缝配合**：`?` 操作符可能在任意点提前返回，但所有已获取的资源都会被自动清理。你不需要在每条错误路径上重复编写清理代码——这是 C 语言中无法想象的安全保证。
+
+### Deref 强制转换：便利与边界
+
+Deref coercion 让 `Box<T>`、`Arc<T>` 等智能指针在大多数场景下表现得像内部类型的引用，极大地提升了使用便利性。但使用时有明确边界：
+
+**适合实现 Deref 的场景**：你的类型在语义上就是目标类型的"透明引用"——`Box<T>`、`Rc<T>`、`Arc<T>`、`MutexGuard<T>`、`Ref<'_, T>`。调用者期望 `*x` 得到内部值。
+
+**不应实现 Deref 的场景**：为了模拟继承、或仅仅为了省去几个方法转发。滥用 Deref 会让方法调用的来源变得模糊——读者无法一眼看出某个方法调用是来自包装类型还是被包装类型。当 `*x` 的含义不唯一时，应暴露方法或实现 `AsRef` / `From` 等转换 trait。
+
+经验法则：Deref 只应有一个合理的语义目标。如果一个类型包装了多种不同语义的内部值，或者包装本身有独立的行为语义，就不应实现 Deref。
+
 ---
 
 ## 关键术语对照表
@@ -680,6 +747,8 @@ let should_fail = true; // 改为 true 测试错误路径
 - [std::ops::Deref](https://doc.rust-lang.org/std/ops/trait.Deref.html)
 - [std::mem::drop](https://doc.rust-lang.org/std/mem/fn.drop.html)
 - [RAII - cppreference.com](https://en.cppreference.com/w/cpp/language/raii)
+- 相关章节：[第18章 — 闭包与迭代器](../18_closures_iterators/README.md) — move 闭包通过所有权转移与 Drop 机制紧密关联
+- 相关章节：[第25章 — Cargo 依赖与 Feature](../25_cargo_dependencies_features_profiles/README.md) — profile 配置可影响 release 模式下 Drop 的优化行为
 
 ---
 

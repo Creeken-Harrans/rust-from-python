@@ -2,6 +2,8 @@
 
 > **核心术语**：Result, Ok, Err, panic!, unwrap, expect, ? operator, Error Propagation 错误传播, Custom Error 自定义错误  
 > **对应 Python 概念**：exceptions, try/except, raise, finally
+>
+> 📚 **相关章节**：[09 枚举与模式匹配](../09_enums_option_pattern_matching/) | [13 包箱模块](../13_packages_crates_modules_visibility/) | [15 泛型与特征](../15_generics_traits_trait_bounds/)
 
 ---
 
@@ -64,6 +66,130 @@ def parse_number(s: str) -> int:
 2. **强制性（Mandatory）**：编译器强制调用者处理错误
 3. **零开销（Zero-cost）**：Result 的运行时表现和手写错误码一样高效
 4. **可组合性（Composable）**：? 运算符让错误传播简洁而不失明确性
+
+---
+
+## Python、C 与 C++ 对照
+
+### C：返回码与 errno —— 错误容易被忽略
+
+C 语言没有内置的异常机制，错误处理依赖函数返回值和全局变量 `errno`：
+
+```c
+FILE *f = fopen("data.txt", "r");
+if (f == NULL) {
+    // errno 记录了具体的错误原因，但编译器不强制你检查
+    perror("打开文件失败");
+    return 1;
+}
+```
+
+问题很明显：调用者完全可以忽略返回值。`fopen` 返回 `NULL` 时，如果代码继续使用 `f`，就是未定义行为。`errno` 是一个全局变量，多线程环境下需要额外处理（`errno` 在现代系统上是线程局部的，但模式本身仍然脆弱）。C 的错误处理依赖于"程序员记得检查"——而人类是最不可靠的。
+
+### C++：异常、错误码与 std::expected
+
+C++ 提供了多种错误处理方式，各有取舍：
+
+```cpp
+// 方式一：异常 —— 栈展开，可以从任意深度抛出
+double divide(int a, int b) {
+    if (b == 0) throw std::runtime_error("除零错误");
+    return static_cast<double>(a) / b;
+}
+
+// 方式二：错误码 —— std::error_code，类似 C 风格但类型安全
+// 方式三（C++23）：std::expected —— 受 Rust Result 启发
+std::expected<int, std::string> parse_number(std::string_view s) {
+    // ...
+}
+```
+
+异常的优点是"正常路径"代码简洁：不需要在每个调用点检查错误，异常会自动向上冒泡。缺点是控制流变得不透明——你无法从函数签名判断它可能抛出什么异常（`noexcept` 只能标记"不抛出"，不能标记"可能抛出什么"）。`catch(...)` 同样可以吞没错误。`std::expected`（C++23）是向着 Rust 方向迈出的一步，但由于语言历史包袱，它无法成为 C++ 生态中的唯一标准。
+
+### Python：异常 —— 运行时机制，调用者可能不知道会抛出什么
+
+Python 使用异常作为主要的错误处理手段：
+
+```python
+def parse_config(path: str) -> dict:
+    with open(path) as f:           # 可能抛出 FileNotFoundError
+        data = json.load(f)         # 可能抛出 JSONDecodeError
+    # 可能抛出 KeyError
+    return {"version": data["version"], "port": data["port"]}
+```
+
+从函数签名 `-> dict` 完全看不出这个函数可能失败。异常什么时候抛出、抛出什么类型，只能靠文档、惯例或阅读源码来了解。这在大型项目中是个真实问题：调用者可能在不知道的情况下遗漏了对某些异常的处理，直到生产环境崩溃。
+
+Python 的异常机制是动态的、灵活的，适合快速开发和脚本场景。但"可选处理"意味着"可能被忽略"——和 C 的返回码一样，最终依赖的是程序员的纪律。
+
+### Rust：Result<T, E> —— 失败被编码在类型签名中
+
+Rust 把"这个操作可能失败"写进了类型系统：
+
+```rust
+fn parse_config(path: &str) -> Result<Config, ConfigError> {
+    let content = std::fs::read_to_string(path)?;            // io::Error → ConfigError
+    let data: Value = serde_json::from_str(&content)?;       // serde_json::Error → ConfigError
+    let version = data["version"].as_str()
+        .ok_or(ConfigError::MissingField("version"))?;       // None → ConfigError
+    Ok(Config { version: version.to_string() })
+}
+```
+
+与 C、C++、Python 的关键区别：**调用者无法无声地忽略错误**。`Result<T, E>` 不是"可选的"错误处理——编译器会警告"未使用的 Result"，`#[must_use]` 属性让它不被检查就是编译错误。这不是说 Rust 的错误处理就一定"更好"，而是它做出了一种不同的权衡：以更多的类型标注为代价，换取更强的编译期保证。
+
+没有一种错误处理机制在所有场景下都绝对优于其他。C 的返回码足够轻量，适合嵌入式系统；C++ 的异常在不需要细粒度错误处理的场景减少了模板代码；Python 的异常让脚本编写快速直接；Rust 的 Result 在系统编程中提供了最强的不变式保证。选择取决于你的上下文。
+
+### 关键澄清
+
+**`panic!` 不是通用错误机制。** `panic!` 用于不可恢复的错误和内部不变量违反。比如数组越界、`assert!` 失败、或程序进入了"按逻辑不可能到达"的状态。不要把 `panic!` 当成一种"另类异常"来用——它更接近 C 的 `abort()`，表示程序已经不安全了，应该终止。
+
+**`Result<T, E>` 用于调用者有机会处理的失败。** 文件不存在、网络超时、用户输入格式错误——这些是"正常业务逻辑的一部分"。用 `Result` 表示，把处理决策权交给调用者。
+
+**`unwrap()` 和 `expect()` 是教学和原型阶段的便利工具，不适合生产代码。** 它们本质上是在说："如果出错就崩溃"。在库代码中尤其不应该使用——库里 unwrap 了，调用者连处理错误的机会都没有。例外：你已经通过逻辑确保了值一定是 `Ok`（比如先 `is_ok()` 检查过），或测试代码。
+
+**`?` 不会吞没错误——它会传播并尝试类型转换。** `?` 展开后相当于 `Err(e) => return Err(From::from(e))`。错误没有消失，它只是带着可能的类型转换向上传递给了调用者。每一个 `?` 都是一个显式的"这里可能提前返回"标记，读代码的人可以清晰地看到错误传播路径。
+
+**错误类型设计就是 API 设计。** 用 `String` 或 `Box<dyn Error>` 当错误类型是在逃避设计决策。好的自定义错误类型（用 `enum`，实现 `Display` + `Error` + `From`）让调用者可以精确匹配不同的失败场景。错误信息是给两种人看的：终端用户看到友好描述，开发者通过 `source()` 追溯根因。
+
+### 四种语言的错误处理代码对比
+
+同一个任务——读取文件并解析数字——展现了四套错误处理哲学的核心差异：
+
+```c
+// C：返回值 + errno，编译器不强制检查
+FILE *f = fopen("data.txt", "r");
+if (f == NULL) { /* 必须手动检查 —— 但忘了也不会报错 */ }
+```
+
+```cpp
+// C++：异常 —— 可以跳过调用点，控制流不透明
+std::ifstream file("data.txt");
+if (!file) throw std::runtime_error("无法打开文件");
+// 调用者可以 catch，也可以不 catch —— 不 catch 就 std::terminate
+```
+
+```python
+# Python：异常 —— 运行时机制，签名看不出可能失败
+def read_data(path: str) -> list[int]:
+    with open(path) as f:  # 可能 FileNotFoundError —— 签名不体现
+        return [int(line) for line in f]
+```
+
+```rust
+// Rust：Result —— 类型签名强制调用者处理
+fn read_data(path: &str) -> Result<Vec<i32>, io::Error> {
+    //                                        ^^^^^^^^^ 签名已说明可能失败
+    let content = std::fs::read_to_string(path)?;
+    let numbers: Vec<i32> = content.lines()
+        .filter_map(|l| l.trim().parse().ok())
+        .collect();
+    Ok(numbers)
+}
+// 调用者必须处理这个 Result —— 编译器保证
+```
+
+Rust 的独特之处不在于"能处理错误"——所有语言都能。而在于**编译器强制你处理**。你不能像 C 那样忘记检查返回值，不能像 C++ 那样让异常无声地穿过，也不能像 Python 那样让调用方完全不知道函数可能失败。这不是说 Rust 的方式更"优越"，而是说它提供了一种不同的保证级别：如果你需要在编译期就消除一整类运行时错误，它是为此而设计的。
 
 ---
 

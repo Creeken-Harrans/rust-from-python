@@ -19,9 +19,63 @@ clippy 版本: clippy 0.1.96 (ac68faa20c 2026-05-25)
 |------|------|
 | 教学章节 Package | 28 |
 | 综合项目 Package | 5 |
-| 根级说明文档 | 10 |
+| 根级说明文档 | 14 (含第二轮新增 3 + 更新 5) |
 | 检查脚本 | 2 |
 | 总 Package 数 | 33 |
+
+---
+
+## 第二轮增强 (2026-06-05)
+
+### 新增根级文档
+- [x] `C_CPP_TO_RUST.md` — C/C++ → Rust 系统概念对照 (8 大主题)
+- [x] `MENTAL_MODELS.md` — 9 个核心思维模型
+- [x] `MISCONCEPTIONS.md` — 25 条常见误解澄清
+
+### 已增强的章节 (C/C++ 对照)
+- [x] 00-06, 08-10, 12-13, 15-22, 24-25 (共 21 个章节)
+
+### 新增迁移思维练习
+- [x] 11 个重点章节 EXERCISES.md 新增"迁移思维练习" (2-4 题/章)
+
+### 综合项目 README 更新
+- [x] 5 个项目 README 新增"迁移设计差异"小节
+
+### 交叉链接
+- [x] 全部增强章节间添加相关章节链接
+
+---
+
+## 第二轮验证结果
+
+**状态: ✅ 全部通过** (2026-06-05)
+
+### 验证命令执行结果
+
+| 命令 | 结果 | 备注 |
+|------|------|------|
+| `cargo fmt --all -- --check` | ✅ 通过 | 仅 ch17 需要自动格式化（允许属性换行） |
+| `cargo check --workspace --all-targets` | ✅ 通过 | 33 个 Package 全部通过 |
+| `cargo test --workspace` | ✅ 通过 | 所有单元测试、集成测试、文档测试通过 |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | ✅ 通过 | 零 Clippy 错误 |
+| `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | ✅ 通过 | 所有文档成功生成 |
+
+### 新增文件统计
+
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| 新增根级文档 | 3 | C_CPP_TO_RUST.md, MENTAL_MODELS.md, MISCONCEPTIONS.md |
+| 更新根级文档 | 5 | README.md, COURSE_MAP.md, LEARNING_GUIDE.md, GLOSSARY.md, PROGRESS.md |
+| 增强章节 README | 21 | 00-06, 08-10, 12-13, 15-22, 24-25 |
+| 新增迁移练习 | 11 | 重点章节 EXERCISES.md 新增"迁移思维练习" |
+| 新增练习答案 | 11 | 重点章节新增 SOLUTIONS.md |
+| 更新项目 README | 5 | P01-P05 新增"迁移设计差异"小节 |
+| 新增检查脚本 | 1 | scripts/check_links.sh |
+| **合计修改/新增** | **57** | — |
+
+### 代码变更
+
+所有变更为纯文档修改（Markdown），Rust 源代码无变动。编译、测试、Clippy、文档检查全部通过。
 
 ## 目录结构
 
@@ -190,6 +244,7 @@ cargo run -p course_orientation
 本教程成功创建了一个完整的、由浅入深的 Rust 中文教程，包含：
 - 28 个独立可运行的 Cargo Package 教学章节
 - 5 个综合实战项目
-- 10 份根级说明文档
+- 14 份根级说明文档（含 C/C++ 对照、思维模型、误解清单）
+- 11 个重点章节新增"迁移思维练习"及配套答案
 - 所有代码通过格式化、类型检查、测试、Clippy 和文档检查
-- 面向 Python 学习者，提供系统化的概念对照和学习指导
+- 面向 Python + C/C++ 基础学习者，提供系统化的概念对照和学习指导

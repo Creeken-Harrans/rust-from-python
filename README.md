@@ -18,14 +18,29 @@
 ## 面向人群
 
 - ✅ 具有 Python 编程基础（了解变量、函数、类、模块）
-- ✅ 想学习系统编程但无 C/C++ 基础
+- ✅ 接触过 C 和 C++ 基本语法（变量、指针、结构体、类），但未形成系统编程知识体系
+- ✅ 想学习系统编程但无完整的 C/C++ 深度经验
 - ✅ 想理解 Rust 为何被称为"内存安全且高性能"
 - ✅ 愿意投入时间系统学习（不是"30 分钟速成"）
 - ❌ 不适合：只想快速浏览 Rust 语法差异的读者
 
+> **同时具有 C/C++ 基础？** 阅读 [C_CPP_TO_RUST.md](C_CPP_TO_RUST.md) 获取系统化的 C/C++ → Rust 概念对照。
+
 ---
 
-## 推荐学习顺序
+## 推荐阅读顺序
+
+### 开始学习前
+
+```
+README.md
+→ LEARNING_GUIDE.md
+→ MENTAL_MODELS.md         ← 建立正确的直觉
+→ PYTHON_TO_RUST.md         ← Python 概念对照
+→ C_CPP_TO_RUST.md          ← C/C++ 概念对照（如有 C/C++ 基础）
+→ MISCONCEPTIONS.md         ← 常见误解清单
+→ chapters/00_course_orientation
+```
 
 ### 按阶段学习
 
@@ -181,13 +196,15 @@ cargo doc --workspace --no-deps --open
 rust-from-python/
 ├── README.md                    # 本文件
 ├── COURSE_MAP.md                # 课程地图
-├── LEARNING_GUIDE.md            # 学习指南（Python 学习者必读）
-├── PROJECT_STRUCTURE.md         # 项目结构详解
+├── LEARNING_GUIDE.md            # 学习指南
+├── MENTAL_MODELS.md             # Rust 学习思维模型
 ├── PYTHON_TO_RUST.md            # Python → Rust 概念对照表
+├── C_CPP_TO_RUST.md             # C/C++ → Rust 概念系统对照
+├── MISCONCEPTIONS.md            # 常见误解澄清
 ├── GLOSSARY.md                  # 中英术语表
 ├── COMMANDS.md                  # 命令速查
 ├── TROUBLESHOOTING.md           # 排错指南
-├── PROGRESS.md                  # 创建进度
+├── PROGRESS.md                  # 创建与改进进度
 ├── VALIDATION.md                # 验证报告
 ├── Cargo.toml                   # Virtual Workspace
 ├── rust-toolchain.toml          # 工具链声明

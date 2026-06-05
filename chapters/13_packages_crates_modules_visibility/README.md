@@ -557,6 +557,84 @@ use my_project::services::parse_task_line;
 
 ---
 
+## 各语言模块系统对比
+
+Rust 的模块系统与 C、C++、Python 的对应机制各有相似之处，但都存在关键差异。以下逐一对标，帮助你建立正确的思维模型。
+
+**C 语言：头文件、源文件与翻译单元**
+
+C 语言通过 `#include` 预处理器指令实现代码组织。`#include` **本质是文本替换**——预处理器将头文件的内容逐字复制到源文件中，形成翻译单元（translation unit），再由编译器独立编译。这套机制带来以下问题：
+- 同一个头文件可能被多个源文件包含，导致重复编译
+- 头文件之间存在循环依赖和重复包含的风险（靠 `#ifndef` 守卫解决）
+- 没有命名空间机制，全局符号靠命名前缀避免冲突
+- 声明（`.h`）与实现（`.c`）分离，维护负担加倍
+
+**C++：命名空间与翻译单元**
+
+C++ 在 C 的翻译单元模型之上增加了命名空间（namespace）：
+- `namespace` 提供逻辑分组，允许同名符号在不同命名空间中共存
+- 头文件和源文件的分离依然存在（尽管 C++20 的 modules 试图改变这一点）
+- `using namespace` 将命名空间中的名称引入当前作用域
+- 翻译单元仍然是独立编译的基本单位，编译速度受 `#include` 影响
+
+**Python：模块与包**
+
+Python 中**文件系统即模块系统**：
+- 每个 `.py` 文件自动成为一个模块（module）
+- 包含 `__init__.py` 的目录成为一个包（package）
+- `import` 语句在运行时加载模块并绑定到当前作用域
+- 默认所有顶层名称公开，`_` 前缀仅为约定（非强制）
+- 没有编译时可见性控制——一切在运行时解析
+
+**Rust：模块、Crate、Package、Workspace**
+
+Rust 将"代码组织"拆分为四个层次，各自解决不同问题：
+
+| Rust 概念 | 解决的问题 | 容易误认为 | 为什么不等价 |
+|-----------|----------|-----------|-------------|
+| `use` | 将路径引入当前作用域 | C/C++ `#include` | `#include` 是文本替换，会复制文件内容；`use` 只是创建路径别名，不进行任何文本插入 |
+| `mod` | 声明模块树的结构 | Python `import` | Python 的 `import` 加载并绑定模块；Rust 的 `mod` 声明模块的存在并将其纳入模块树，`use` 才负责将名称引入作用域 |
+| Crate | 编译器一次处理的基本编译单元 | 单个 `.cpp` 翻译单元 | C++ 翻译单元从源文件开始（经预处理后）；Rust 的 Crate 是一棵模块树，边界由 crate root 文件定义 |
+| Package | Cargo 的项目管理单元 | Python 包 | Python 包是文件系统目录；Rust Package 可包含多个 Crate（1 个 library + 多个 binary），由 `Cargo.toml` 定义 |
+| Workspace | 多个 Package 的协作空间 | 单一项目目录 | Workspace 允许多个关联 Package 共享 `Cargo.lock` 和 `target/` 输出目录，提供统一的构建管理和依赖解析 |
+
+**`use` 不是 `#include`**
+
+```c
+// C: #include 是文本复制
+#include "header.h"  // header.h 的全部内容被粘贴到这里
+```
+
+```rust
+// Rust: use 只是路径别名
+use std::collections::HashMap;  // 不生成任何代码，只是让 HashMap 在作用域中可直接使用
+```
+
+- `#include` 会导致重复内容、编译时间增长、宏污染等问题
+- `use` 不产生任何运行时开销，仅仅是编译器的名字解析辅助
+
+**`mod` 不是 Python 的 `import`**
+
+```python
+# Python: 创建 models.py 后自动作为一个模块可用
+import models  # models.py 被自动加载
+```
+
+```rust
+// Rust: 创建 models.rs 后必须显式声明
+pub mod models;  // 声明 "models 模块存在"，编译器查找 models.rs
+// 然后在需要的地方:
+use crate::models::Task;  // 这才类似于 Python 的 from models import Task
+```
+
+在 Python 中，创建一个 `.py` 文件就创建了一个模块。在 Rust 中，创建一个 `.rs` 文件后，**必须**在父模块中用 `mod` 显式声明它，才能成为模块树的一部分。
+
+> **关键理解**：Rust 的模块系统与文件系统是两个独立的概念——`mod` 负责声明模块结构，`use` 负责简化路径引用。这与 C 的 `#include`（文本替换）、Python 的 `import`（运行时加载）有本质区别。
+>
+> 关于集合类型（Vec、String、HashMap）的详细讨论，参见[第 10 章：集合类型](../10_collections_vec_string_hashmap/README.md)。关于 trait 对象与动态分派，参见[第 17 章：特征对象与动态分派](../17_trait_objects_dynamic_dispatch/README.md)。
+
+---
+
 ## 常见误区
 
 ### 误区 1：认为 `src/foo.rs` 自动是一个模块

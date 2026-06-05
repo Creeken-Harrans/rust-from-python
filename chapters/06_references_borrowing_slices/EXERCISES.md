@@ -399,3 +399,21 @@ fn count_vowels(s: &str) -> usize {
 
 > "The borrow checker is not your enemy — it's your most diligent code reviewer, working 24/7 to prevent memory bugs before they reach production."
 > — Rust 社区
+
+---
+
+## 迁移思维练习
+
+> 以下问题帮助你思考 C 中的指针传递模式如何重新建模为 Rust 的引用与切片。
+
+### 问题 1：C 中通过指针传递数组的方式，在 Rust 中应该怎么改为切片？
+
+在 C 中，你习惯用 `void process(int *data, size_t len)` 来传递数组——指针和长度是两个独立参数，编译器不会检查它们的对应关系。Rust 的切片 `&[i32]` 把指针和长度打包在一起。这种打包带来了什么安全保障？如果一段 C 代码中指针和长度来自不同变量、不同来源，翻译到 Rust 时你会发现什么设计问题？
+
+**提示**：切片是一个"胖指针"（pointer + length），它保证了指针和长度的不可分割性，消除了传递错误的长度值的可能性。
+
+### 问题 2：哪些指针关系应该改为借用（&T）？
+
+C/C++ 中充斥着各种指针：函数参数用 `const int*` 表示"我只读不改"、用 `int*` 表示"我可能改"、用 `void*` 表示"任意数据"、存储指向其他对象内部数据的指针作为成员变量……请分类思考：哪些指针关系对应 Rust 的 `&T`（共享不可变借用），哪些对应 `&mut T`（独占可变借用），哪些对应 `Box<T>`（拥有所有权的堆分配）？C 的 `const` 指针和 Rust 的 `&T` 在"不可变"这个概念上有什么本质区别？
+
+**提示**：C 的 `const` 可以被 cast 掉，Rust 的 `&T` 由编译器在类型层面强制不可变——任何绕过 `&T` 修改数据的 unsafe 代码都需要开发者显式标记。

@@ -692,6 +692,78 @@ fn process_dyn(item: &dyn Summary) {
 | 内联优化 | 编译器可以内联 | 无法内联（不知道具体类型） |
 | 语法 | `<T: Trait>` / `impl Trait` | `dyn Trait` |
 
+### 16.4 选择决策表
+
+| 需求 | 优先考虑 |
+|------|---------|
+| 编译期已知具体类型，重视静态优化 | 泛型 + Trait Bound |
+| 需要保存多种实现到同一集合 | `Box<dyn Trait>` 等 Trait Object |
+| 状态集合封闭且变体较少 | Enum |
+| 行为共享但不需要继承树 | Trait + 组合 |
+
+### 16.5 两种分派的代码示例对比
+
+下面的例子用静态分派和动态分派完成同一任务，直观展示语法与语义差异：
+
+```rust
+trait Summary {
+    fn summarize(&self) -> String;
+}
+
+struct NewsArticle { headline: String }
+struct Tweet { content: String }
+
+impl Summary for NewsArticle {
+    fn summarize(&self) -> String {
+        format!("新闻: {}", self.headline)
+    }
+}
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("推文: {}", self.content)
+    }
+}
+
+// ===== 静态分派：泛型 + Trait Bound =====
+// 编译期为每个具体 T 生成独立副本，零运行时开销
+fn notify_static<T: Summary>(item: &T) {
+    println!("[静态] {}", item.summarize());
+}
+
+// ===== 动态分派：dyn Trait =====
+// 运行时通过 vtable 查找方法
+fn notify_dynamic(item: &dyn Summary) {
+    println!("[动态] {}", item.summarize());
+}
+
+fn main() {
+    let article = NewsArticle { headline: "重大新闻".into() };
+    let tweet = Tweet { content: "Hello, Rust!".into() };
+
+    // 静态分派：调用时类型完全确定，各生成独立函数
+    notify_static(&article);  // 生成 notify_static::<NewsArticle>
+    notify_static(&tweet);    // 生成 notify_static::<Tweet>
+
+    // 动态分派：统一通过 vtable 调用
+    notify_dynamic(&article as &dyn Summary);
+    notify_dynamic(&tweet as &dyn Summary);
+
+    // 动态分派的核心优势：异构集合
+    let items: Vec<Box<dyn Summary>> = vec![
+        Box::new(article),
+        Box::new(tweet),
+    ];
+    for item in &items {
+        println!("{}", item.summarize()); // 运行时确定调用哪个实现
+    }
+
+    // 静态分派的限制：Vec 要求所有元素同一类型
+    // let items: Vec<?> = vec![article, tweet]; // 无法编译！
+}
+```
+
+**快速选择法则**：调用处类型明确且追求性能时用泛型（默认选择），需要运行时多态或异构集合时用 `dyn Trait`。
+
 ---
 
 ## 17. 单态化 (Monomorphization)
@@ -1015,6 +1087,164 @@ Rust 的显式多态：
 
 ---
 
+## Python、C 与 C++ 对照
+
+泛型与多态的抽象机制并非 Rust 独有，不同语言走过了不同的演化路径。理解它们在设计理念上的差异，有助于更准确地把握 Rust 选择背后的权衡。
+
+### C：宏与 void\* —— 没有类型安全的"泛型"
+
+C 语言没有真正的泛型机制，开发者依赖两种方式模拟：
+
+**方案一：宏 (Macros)**
+
+```c
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+```
+
+宏在**预处理期**进行文本替换，完全不涉及类型检查。典型陷阱如 `MAX(x++, y++)` 中的双重递增。错误信息定位到展开后的代码而非宏定义处，难以排查。
+
+**方案二：void\* 擦除类型**
+
+```c
+void *find_max(void *array, size_t len,
+               int (*cmp)(const void *, const void *));
+```
+
+通过 `void*` 和函数指针模拟泛型行为。代价是彻底丧失类型安全——编译器无法验证比较函数与数据是否匹配，错误推迟到运行时；每次比较需要函数指针调用，无法内联优化。
+
+**总结**：C 的"泛型"本质是**放弃类型信息换取灵活性**，而 Rust 的泛型是在**保留完整类型信息的前提下消除重复代码**。
+
+### C++：模板 + Concepts —— 强大但历史包袱沉重
+
+C++ 模板 (Templates) 是泛型编程的鼻祖，Rust 深受其影响：
+
+```cpp
+template <typename T>
+T max(T a, T b) {
+    return a > b ? a : b;
+}
+```
+
+与 Rust 泛型的共同点：都是**编译期单态化**、追求**零成本抽象**。关键差异：
+
+| 维度 | C++ 模板 | Rust 泛型 |
+|------|---------|----------|
+| 类型约束 | C++20 Concepts 之前无强制约束；错误在模板展开后暴露，信息常长达数百行 | Trait Bound 在调用处即检查，错误信息精确定位 |
+| 模板特化 | 支持完全特化和偏特化 | 特化仍在 nightly 阶段，日常通过 trait + 组合实现 |
+| SFINAE | 历史上依赖 SFINAE 做编译期条件选择 | 无 SFINAE，通过 trait bound + where 子句完成 |
+| 编译速度 | 每个翻译单元独立展开，大型项目编译缓慢 | crate 级编译，但单态化仍影响编译时间 |
+
+C++20 引入的 **Concepts** 向 Rust 的 Trait Bound 靠近了一大步：
+
+```cpp
+template <typename T>
+concept Summarizable = requires(T t) {
+    { t.summarize() } -> std::convertible_to<std::string>;
+};
+
+template <Summarizable T>
+void notify(const T& item) { /* ... */ }
+```
+
+Concepts 在调用处报错，错误信息大幅改善。但 C++ 必须保持向后兼容，无约束的传统模板仍广泛存在。
+
+### Python：鸭子类型 —— 灵活性的代价
+
+Python 在[第 21 节](#21-python-对照分析)已详细对比，此处仅总结核心差异：
+
+- **检查时机**：Python 在运行时（`AttributeError`），Rust 在编译期。
+- **性能**：Python 依赖动态分派（方法查找、字典查找），Rust 依赖单态化后的直接调用。
+- **设计哲学**：Python 追求"能跑就行"的灵活性，Rust 追求"编译通过即正确"的可靠性。
+
+### Rust：泛型 + Trait Bound —— 编译期保证 + 零成本
+
+Rust 将 C++ 的零成本抽象理念与 ML 系语言的类型严谨性结合在一起：
+
+1. **泛型**提供类型参数化——一份代码适用多种类型。
+2. **Trait Bound**在编译期精确控制泛型参数的能力边界。
+3. **单态化**消除所有抽象开销，生成与手写代码相同性能的机器码。
+
+各语言机制总览：
+
+| 语言 | 泛型机制 | 类型安全 | 运行时开销 | 错误信息质量 |
+|------|---------|---------|-----------|------------|
+| C | 宏 / void\* | 无 | 无（宏）/ 函数指针调用 | 差 |
+| C++ | 模板 + Concepts | 编译期（需主动约束） | 无（单态化） | 模板展开后冗长 / Concepts 改善中 |
+| Python | Duck Typing / Protocol | 仅静态检查工具 | 有（动态分派） | 运行时才发现 |
+| Rust | 泛型 + Trait Bound | 编译期强制 | 无（单态化） | 清晰、精确定位 |
+
+---
+
+## 重要概念澄清
+
+Rust 的 Trait 系统常被类比为其他语言的类似机制，但有几个关键区别必须厘清：
+
+### 1. Trait 不是继承 (Inheritance)
+
+Rust **没有类继承**。`trait A: B` 不是"A 继承 B"，而是"实现 A 的类型必须同时实现 B"——这是**约束依赖**，而非父子层级关系。Rust 不存在"is-a"的继承树，取而代之的是**组合 (Composition)** 和**特征实现 (Trait Implementation)**。
+
+```rust
+// trait Fly: Move 的含义：飞之前得先会动
+trait Fly: Move {
+    fn fly(&self);
+}
+// ❌ 这不是 "Fly 继承自 Move"
+// ✅ 这是 "凡实现 Fly 者，必须也实现 Move"
+```
+
+### 2. Trait 默认方法不是虚函数重写
+
+特征的**默认方法 (Default Method)** 语义与 C++/Java 的虚函数不同：
+
+```rust
+trait Summary {
+    fn summarize(&self) -> String {
+        String::from("(Read more...)")  // 默认实现
+    }
+}
+```
+
+- 在**静态分派** (`<T: Summary>`) 场景下：编译器在编译期就确定调用版本——类型覆盖版或默认版，无虚表查找。
+- 在**动态分派** (`&dyn Summary`) 场景下：才通过 vtable 查找，此时才接近传统虚函数行为。
+- 关键区别：默认实现可以被有意地"不覆盖"，而 C++ 纯虚函数**必须**被覆盖。
+
+### 3. Trait Bound 不是运行时类型检查
+
+`fn foo<T: Summary>(x: &T)` 中的 `T: Summary` 完全在**编译期**验证，不产生任何运行时代码：
+
+```rust
+// 编译期即报错 —— 运行时毫无开销
+// foo(&42);  // error[E0277]: the trait `Summary` is not implemented for `i32`
+// 一旦编译通过，运行时没有任何类型检查
+```
+
+这与 Python 的 `isinstance(obj, Summary)` 有本质区别——后者是运行时检查，存在性能开销。
+
+### 4. 单态化并非没有代价
+
+虽然单态化实现了零**运行时**开销，但它引入了其他维度的成本：
+
+| 代价 | 说明 |
+|------|------|
+| **编译时间增加** | 泛型函数为每种具体类型生成独立代码，大型项目中可能显著拖慢编译 |
+| **二进制体积膨胀 (Code Bloat)** | 每个类型组合产生一份代码副本：`foo::<i32>()`、`foo::<f64>()`、`foo::<String>()`…… |
+| **无运行时类型切换** | 展开后泛型代码无法在同一执行路径处理不同类型——需要 trait object |
+
+实际项目中若泛型参数组合非常多（如 `HashMap<K, V>` 被数十种类型使用），可权衡将部分泛型替换为 `dyn Trait`：牺牲微小的运行时开销，换取更小的二进制体积和更快的编译。也可将泛型函数内部逻辑提取到非泛型内层函数中，减少重复展开量。
+
+### 5. 静态分派与动态分派：各有适用场景
+
+并非"静态分派一定优于动态分派"。两者的取舍：
+
+| 选择静态分派 (`<T: Trait>`) | 选择动态分派 (`dyn Trait`) |
+|---------------------------|--------------------------|
+| 调用处已知具体类型 | 需要运行时切换类型 |
+| 追求极致性能（内联、零开销） | 需要异构集合（`Vec<Box<dyn Trait>>`） |
+| 类型组合数量可控 | 二进制体积比性能更优先 |
+| 可承担编译期展开成本 | 编译速度敏感 |
+
+---
+
 ## 22. 核心术语表
 
 | 术语 (English) | 中文 | 说明 |
@@ -1059,6 +1289,8 @@ Rust 的泛型与特征系统是其类型系统中最强大的抽象能力，核
 | 类型标注可选 | 类型系统是核心 |
 
 这套组合使 Rust 成为一门既能表达高层抽象、又能产出接近 C/C++ 级别性能的系统编程语言。
+
+> 📚 **相关章节**：[09 枚举](../09_enums_option_pattern_matching/) | [16 生命周期](../16_lifetimes/) | [17 特征对象](../17_trait_objects_dynamic_dispatch/) | [18 闭包迭代器](../18_closures_iterators/)
 
 ---
 

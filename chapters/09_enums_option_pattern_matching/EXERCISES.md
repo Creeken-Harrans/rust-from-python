@@ -512,3 +512,21 @@ cargo doc --open
 2. **故意引入错误**：尝试删除一个 `match` 分支、把 `Some` 赋值给 `String`、在 `let else` 中不加 `return`，看看编译器报什么错——这是最快的学习方式
 3. **对照 Python 实现**：为每个练习写一份 Python 版本，体会 Rust 的编译期检查 vs Python 的运行时检查
 4. **练习 3-1 是综合题**：它涵盖了本章所有知识点，如果做完这题并且单元测试通过，说明你真正理解了枚举和模式匹配
+
+---
+
+## 迁移思维练习
+
+> 以下问题帮助你思考 C/Python 中用布尔值或 null 表达状态的代码如何重新建模为 Rust 的枚举。
+
+### 问题 1：C 中用多个 boolean 字段表达状态的代码，如何改为 Rust Enum？
+
+想象一段 C 代码中有这样一个结构体：`struct Connection { bool is_connected; bool is_encrypted; bool is_authenticated; }`，代码中充斥着 `if (conn.is_connected && !conn.is_encrypted) {...}` 这样的条件判断。某些 boolean 组合在业务上实际不可能出现（比如未连接但已认证），但 C 的类型系统无法阻止你写出无意义的组合。如果把这个结构体迁移到 Rust，你会怎么设计一个 Enum 来表达所有合法的连接状态？Enum 如何让"不可能的状态"在编译期就被排除？
+
+**提示**：用 Enum 的每个变体代表一种合法状态，携带该状态下才有的关联数据。编译器会保证 match 覆盖所有可能的变体。
+
+### 问题 2：Python 中返回 None 表示"没找到"的模式，如何改为 Option<T>？
+
+在 Python 中，你习惯写 `def find_user(id): ... return None` 来表示"没找到用户"，调用方可能忘记检查 None 就直接用返回值，导致运行时 `AttributeError`（即 Tony Hoare 所说的"十亿美元错误"）。Rust 的 `Option<T>` 如何迫使调用方必须先处理"没有"的情况？在什么场景下 `Option<T>` 不如自定义 Enum 表达能力强？（比如查找操作可能想区分"用户不存在"和"网络错误"）
+
+**提示**：`Option<T>` 只有 `Some(T)` 和 `None` 两个变体——当你想传递更多失败信息时，应该用 `Result<T, E>` 或自定义 Enum，而不是在 Option 层面打补丁。

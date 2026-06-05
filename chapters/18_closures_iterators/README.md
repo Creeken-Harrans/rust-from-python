@@ -844,6 +844,48 @@ let sum: i32 = (0..1_000_000)
 
 ---
 
+## 跨语言对比与设计取舍
+
+Rust 的迭代器模型融合了多种语言的迭代器设计理念，同时叠加了所有权系统的独特约束。
+
+### Python：迭代器、生成器与推导式
+
+Python 的迭代器协议（`__iter__` / `__next__`）与 Rust 的 `Iterator` trait 概念相似——都是惰性的一一对应序列。但关键区别在于：
+
+- **所有权无感知**：GC 管理使得 Python 迭代无需关心值的所有权，`for x in lst` 迭代后原集合依然可用。Rust 的 `into_iter()` 则是明确的所有权转移——迭代即消费。
+- **列表推导是急切的**：`[x*2 for x in lst]` 立即分配新列表，而 Rust 的 `.map(|x| x*2)` 只在消费时才执行。Python 的生成器表达式 `(x*2 for x in lst)` 更接近 Rust 迭代器的惰性行为。
+- **运行时开销**：Python 的 `map`/`filter` 链每次产生函数调用开销；Rust 的迭代器链在编译后通常被内联为单一循环。
+
+### C++：迭代器、范围与算法库
+
+C++ 的 STL 迭代器模型是 Rust 迭代器的重要灵感来源：
+
+- **迭代器对 vs 适配器链**：C++ 传统上使用 begin/end 对配合 `<algorithm>` 库，如 `std::transform`。C++20 引入的 `std::ranges` 和管道操作符（`|`）使链式调用成为可能，风格向 Rust 靠拢。
+- **安全性差异**：C++ 迭代器无法在编译期防止失效——容器修改后继续使用迭代器是未定义行为。Rust 的借用检查在编译期杜绝了这一问题。
+- **所有权表达**：C++ 迭代器不表达所有权语义。Rust 的 `iter()` / `iter_mut()` / `into_iter()` 在类型层面清晰区分了只读、可变、消费三种模式，这是所有权系统的直接体现。
+
+### 所有权视角：iter / iter_mut / into_iter
+
+三种迭代器方法存在的根本原因是 Rust 的所有权系统：
+
+- `iter()` 返回 `&T`：集合被不可变借用，迭代后依然可用。适合只读遍历。
+- `iter_mut()` 返回 `&mut T`：集合被可变借用，允许原地修改。适合变换原数据。
+- `into_iter()` 返回 `T`：集合所有权转移进迭代器，迭代后原集合不复存在。适合"转换并消费"模式——你不再需要原数据，只需处理结果。
+
+理解这三种方法不是 Rust 的学习障碍，而是 Rust 让你在类型层面精确表达数据处理意图的方式。
+
+### 设计取舍：迭代器不是银弹
+
+迭代器链式调用表达力强，但并非所有场景的最佳选择：
+
+- **复杂控制流**：需要多重 `break`、`continue` 或提前 `return` 时，`for` 循环通常比强行使用 `try_for_each` 等更清晰。
+- **复杂状态管理**：循环体内需要维护、转换多个相互依赖的状态变量时，`for` 循环的可读性通常优于 `fold` 中携带元组状态。
+- **调试体验**：在迭代器链中插入断点比在循环中更麻烦（`inspect` 适配器可以部分缓解）。
+
+经验法则：如果代码的意图是"将数据 A 转换为 B"，迭代器是最佳表达；如果意图是"执行一系列有副作用的步骤"，循环更自然。**可读性优先于简洁性**——不确定时，写两个版本，选择更容易被同事理解的那个。
+
+---
+
 ## 核心术语速查
 
 | 术语 | 英文 | 含义 |
@@ -873,3 +915,5 @@ let sum: i32 = (0..1_000_000)
 - [std::iter 模块文档](https://doc.rust-lang.org/std/iter/index.html)
 - [rayon 并行迭代器](https://docs.rs/rayon/latest/rayon/iter/index.html)
 - [itertools crate — 更多适配器](https://docs.rs/itertools/latest/itertools/)
+- 相关章节：[第20章 — 资源管理 Drop/Deref](../20_resource_management_drop_deref/README.md) — move 闭包与所有权转移的深入讨论
+- 相关章节：[第25章 — Cargo 依赖与 Feature](../25_cargo_dependencies_features_profiles/README.md) — 使用 feature 控制迭代器实现的条件编译

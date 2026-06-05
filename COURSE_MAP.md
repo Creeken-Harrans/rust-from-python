@@ -109,6 +109,24 @@
 
 ---
 
+## 🔴 最高难度章节
+
+以下章节是 Rust 学习的核心难点，建议投入额外时间，配合 [MENTAL_MODELS.md](MENTAL_MODELS.md) 和 [MISCONCEPTIONS.md](MISCONCEPTIONS.md) 阅读：
+
+| 章节 | 难点 | 核心挑战 |
+|------|------|---------|
+| **05** | 所有权 (Ownership) | 从"一切皆引用"到"每个值有唯一主人"的思维转变 |
+| **06** | 借用 (Borrowing) | 共享引用 vs 独占引用，借用检查器规则 |
+| **16** | 生命周期 (Lifetimes) | 理解标注不延长寿命，表达引用关系 |
+| **19** | 智能指针 (Smart Pointers) | 多种指针的选择决策、内部可变性 |
+| **21** | 并发 (Concurrency) | Send/Sync、Arc<Mutex<T>>、死锁风险 |
+| **22** | 异步 (Async) | Future 惰性求值、Runtime 角色、与多线程的区别 |
+| **24** | Unsafe Rust | 安全边界抽象、FFI 注意事项 |
+
+> 💡 如果你有 C/C++ 背景，阅读 [C_CPP_TO_RUST.md](C_CPP_TO_RUST.md) 可以帮助你快速定位 Rust 与 C/C++ 的差异。但请注意**相似不等于等价**。
+
+---
+
 ## 学习路径建议
 
 ### 快速入门路径（约 20 小时）

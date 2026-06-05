@@ -672,6 +672,176 @@ enum ConfigValue<T> {
 
 ---
 
+## Python、C 与 C++ 对照
+
+C 语言的枚举本质上是给整数常量起名字：
+
+```c
+enum Color { Red, Green, Blue };  // Red=0, Green=1, Blue=2
+enum Color c = Red;
+c = 42;  // 完全合法——C 编译器不限制枚举变量的取值范围
+```
+
+C 枚举有三大局限：
+
+1. **不能携带数据**——你无法表达"连接状态是 Connected，且对端地址是 192.168.1.1"。每个变体只是一个整数标签，没有任何数据载荷能力。
+2. **不是真正的独立类型**——枚举变量和 `int` 可以自由互转。函数签名 `void set_state(enum State s)` 无法阻止调用者传入任意整数值（如 `set_state(99)`）。
+3. **没有穷尽性检查**——`switch` 不强制覆盖所有枚举值，遗漏的分支静默穿过，不产生任何警告或错误。
+
+C++ 的 `enum class`（C++11）解决了作用域污染和隐式整数转换问题，但本质仍然是整数标签：
+
+```cpp
+enum class Color { Red, Green, Blue };
+Color c = Color::Red;
+// c = 42;                  // ❌ 编译错误：不能隐式转换 int
+int i = static_cast<int>(c); // 需要显式转换
+```
+
+`enum class` 是强类型的，但**依然不能携带数据**，也**没有穷尽性检查**。它是"更安全的 C 枚举"，但远不是代数数据类型。
+
+C++17 引入了 `std::variant`，向 Rust 枚举靠近了一步：
+
+```cpp
+#include <variant>
+#include <string>
+
+using ConnectionState = std::variant<
+    std::monostate,              // Disconnected
+    unsigned int,                // Connecting { attempt }
+    std::string,                 // Connected { peer }
+    std::string                  // Failed { reason } — 问题：两个变体都是 string
+>;
+```
+
+`std::variant` 的局限很明显：
+
+- **无法命名变体**——你看到的是 `variant<monostate, uint, string, string>` 而非 `Connected(peer)` 和 `Failed(reason)`，可读性很差。代码注释需要承担类型本该承担的表达力。
+- **类型必须互不相同**——上面的 `Connected` 和 `Failed` 都携带 `std::string`，编译器无法区分它们。真实项目中必须借助标签结构体等工作量不小的技巧来绕过。
+- **穷尽性靠模板而非语言层面检查**——`std::visit` 遗漏一个类型时，报错是模板展开失败的数百行晦涩信息，而非一条清晰的"你漏了 Failed 变体"。
+
+Rust 的枚举是代数数据类型（Algebraic Data Type），每个变体拥有独立的名称和数据结构：
+
+```rust
+enum ConnectionState {
+    Disconnected,
+    Connecting { attempt: u32 },
+    Connected { peer: String },
+    Failed { reason: String },
+}
+```
+
+同样的连接状态，在传统 C/C++ 中需要用多个布尔字段加可选字符串来拼凑：
+
+```c
+// 传统 C/C++ 做法：用多个字段模拟一个状态
+struct Connection {
+    bool is_connected;
+    bool is_connecting;
+    bool is_failed;
+    int  attempt_count;      // 只在 is_connecting 时有效
+    char peer[64];           // 只在 is_connected 时有效
+    char fail_reason[256];   // 只在 is_failed 时有效
+};
+```
+
+这种做法的根本缺陷在于**非法状态可表示**：
+
+- `is_connected == true && is_failed == true` —— 这个组合在语义上不可能，但在类型系统中完全合法。你必须在代码中额外防御它，否则就是 bug。
+- **字段语义靠约定**：调用者必须"知道" `attempt_count` 只在 `is_connecting` 时有效，编译器不帮你检查。任何误读约定都是运行时错误。
+- **新增状态会污染整个结构体**：加一个 `is_reconnecting` 字段不仅增加存储开销，还会引入更多非法状态组合（`is_reconnecting && is_connected`？`is_reconnecting && is_failed`？），复杂度呈指数增长。
+
+Rust 的枚举从类型层面消除了这些问题：`ConnectionState` 在任意时刻**恰好是**四种状态之一，不可能出现 `Connected` 和 `Failed` 同时成立的情况。这就是"让非法状态不可表示"（making illegal states unrepresentable）——类型系统本身保证了数据一致性，不需要靠文档约定或运行时断言来补救。
+
+---
+
+## Option\<T\> 深入：空指针问题与类型安全
+
+C/C++ 中，任何指针都可以是 `NULL`（或 `nullptr`）：
+
+```c
+char* find_user(const char* name);  // 返回值可能是 NULL，也可能不是
+
+char* user = find_user("alice");
+printf("%s\n", user);  // 💥 如果 user 是 NULL → segmentation fault
+```
+
+函数的类型签名**不会告诉你**返回值到底可不可能为空。`char*` 可能指向有效内存，可能是 `NULL`，还可能是悬垂指针。你只能靠文档、命名约定（如 `maybe_find_user`）或运行时崩溃来猜测真相。Tony Hoare——`null` 引用的发明者——在 2009 年将其称为"十亿美元错误"：这个单一设计决策数十年来导致了不计其数的安全漏洞、系统崩溃和调试时间。
+
+Python 的 `None` 在概念上类似，但有了类型提示（type hints）后情况有所好转：
+
+```python
+def find_user(name: str) -> UserProfile | None:  # 类型提示标明可能返回 None
+    ...
+```
+
+问题在于：类型提示是**可选的**，且只在静态分析工具（如 mypy）运行时生效。Python 解释器自身不强制执行类型提示——你完全可以忽略 `None` 检查而直接使用返回值，直到运行时抛出 `AttributeError`。
+
+Rust 的 `Option<T>` 从根本上解决了这个问题：**`Option<T>` 和 `T` 是两个不同的类型**。你不可能绕过 `Option` 直接使用内部值：
+
+```rust
+let email: Option<String> = Some("alice@example.com".into());
+// email.to_uppercase();  // ❌ 编译错误：Option<String> 没有 to_uppercase() 方法
+```
+
+类型标注 `Option<String>` 本身就是文档——任何人看到这个签名都立刻知道返回值可能不存在。更重要的是，编译器强制执行：你**必须**通过 `match`（或等价的组合子方法）处理 `Some` 和 `None` 两种情况，否则代码无法编译。不可能"忘了检查 None"。
+
+Rust 引用（`&T`）的另一个关键保证是：**引用永远不为空**。`&T` 一定指向一个有效的 `T`，你无法创造一个值为 `null` 的 `&str`。当你确实需要一个"可能不存在的引用"时，使用 `Option<&T>`——它明确表达了可空性，且编译器强制检查。这与 C/C++ 中任何指针都可以为 `NULL` 形成了根本性的差异：
+
+| 语言 | "可能为空的引用/指针" | 编译器强制检查 |
+|------|----------------------|--------------|
+| C | `T*`（任何指针都可能空，类型不表达） | 无 |
+| C++ | `T*` 或 `std::optional<std::reference_wrapper<T>>` | 无 / 弱（静态分析工具） |
+| Python | `Optional[T]`（类型提示，运行时不管） | 仅静态分析工具（mypy） |
+| Rust | `Option<&T>` | 编译期强制 |
+
+`match` 是强制调用者面对现实的机制：当函数返回 `Option<UserProfile>`，调用者**必须**写出 `Some(profile) => { ... }` 和 `None => { ... }` 两个分支（或用 `if let` 明确跳过其中一个）。这不是代码风格的建议，是编译器层面的硬性规则。空指针异常——这个困扰了业界半个世纪的问题——在 Rust 中不是"更不容易发生"，而是**在编译期被消灭了**。
+
+---
+
+## match 穷尽性：从 C switch 到编译器强制检查
+
+C 语言的 `switch` 对穷尽性没有任何要求：
+
+```c
+enum Status { Active, Inactive, Banned };
+
+enum Status s = Banned;
+switch (s) {
+    case Active:   printf("活跃\n"); break;
+    case Inactive: printf("未激活\n"); break;
+    // Banned 被遗漏了——没有警告，没有错误，编译通过，静默跳过
+}
+```
+
+更危险的是 C `switch` 的默认行为是**贯穿（fallthrough）**——忘了写 `break` 就会继续执行下一个 `case` 的代码。这是 C 语言中经典且高频的 bug 来源。
+
+C++ 的 `switch` 在 GCC/Clang 中可以通过 `-Wswitch` 选项对遗漏的 `enum class` 值产生**警告**，但这有两个致命弱点：一是警告可以被忽略或关闭，二是添加 `default:` 标签会吞掉所有未显式列出的分支，使警告失效。
+
+Rust 的 `match` 采取完全不同的策略：**编译期强制穷尽性检查，缺失任何变体就是编译错误**。
+
+```rust
+match status {
+    UserStatus::Active => "活跃",
+    UserStatus::Inactive => "未激活",
+    // ❌ 编译错误：error[E0004]: non-exhaustive patterns: `Banned` not covered
+}
+```
+
+这个特性在重构时价值巨大。假设你在代码库中有一个 `UserStatus` 枚举，被分布在多个模块中的 50 个 `match` 表达式使用。现在产品需求变更，你需要新增一个变体 `UserStatus::Suspended`。在 C/C++ 项目中，你必须人工搜索所有 `switch` 语句，逐一判断是否需要添加 `case——`遗漏是常态，bug 往往在上线后才发现。
+
+在 Rust 项目中，你只需在枚举定义处添加一行 `Suspended`，然后编译。编译器会在**所有 50 个 `match` 处**精确报错，列出文件、行号和缺失的变体。你逐条修复，直到编译通过。编译器帮你完成了"影响范围分析"的工作——不会遗漏，不需搜索，不可能在上线后才发现某个角落没有处理新状态。
+
+| 特性 | C `switch` | C++ `switch` | Rust `match` |
+|------|-----------|-------------|-------------|
+| 穷尽性检查 | 无 | 可选警告（`-Wswitch`） | 编译期强制错误 |
+| 默认贯穿 | 是（fallthrough） | 是（fallthrough） | 否（每分支自动终止，手动 fallthrough 需 `=>` 后无分号） |
+| 新增变体时 | 静默忽略 | 可能产生警告（无 `default` 时） | 所有 `match` 处精确报编译错误 |
+| 分支表达力 | 整数 / 枚举常量 | 整数 / 枚举常量 | 任意嵌套模式、解构、守卫条件、`@` 绑定 |
+
+Rust 的模式匹配不只是"更安全的 `switch`"——它把运行时的不确定性变成了编译期的确定性，是语言层面对正确性的承诺。
+
+---
+
 ## 10. 章节总结
 
 ### 核心概念一览
@@ -726,5 +896,7 @@ enum ConfigValue<T> {
 | Prelude | 预导入 | 自动导入到所有程序的标准类型/函数 |
 
 ---
+
+> 📚 **相关章节**：[08 结构体与方法](../08_structs_methods_associated_functions/) | [10 集合类型](../10_collections_vec_string_hashmap/) | [11 模式与解构](../11_patterns_and_destructuring/) | [15 泛型与特征](../15_generics_traits_trait_bounds/)
 
 *下一章预告：第 10 章 —— Result 与错误处理，深入探讨 Rust 如何用类型系统优雅地处理可恢复错误。*

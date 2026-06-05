@@ -552,6 +552,113 @@ Rust 的 `self`（所有权转移）在 Python 中没有直接对应。最接近
 
 ---
 
+## Python、C 与 C++ 对照
+
+如果你有 C 或 C++ 的经验，Rust 的结构体和方法系统与你熟悉的 OOP 模式之间既有表面相似，也有根本分歧。
+
+### 1. Rust struct + impl vs C struct vs C++ class
+
+**C 的 struct** 是纯粹的数据容器——没有方法，没有可见性控制，没有构造/析构：
+
+```c
+typedef struct {
+    double width;
+    double height;
+} Rectangle;
+
+// 函数只能放在外面，以结构体为参数
+double rect_area(const Rectangle* r) {
+    return r->width * r->height;
+}
+```
+
+**C++ 的 class** 将数据和行为捆绑在一起，并提供继承、多态、访问控制等全套 OOP 机制：
+
+```cpp
+class Rectangle {
+    double width, height;
+public:
+    Rectangle(double w, double h) : width(w), height(h) {}
+    double area() const { return width * height; }
+};
+```
+
+**Rust 走了第三条路**：数据在 `struct` 里，行为在 `impl` 块里——两者是分离的：
+
+```rust
+struct Rectangle { width: f64, height: f64 }
+
+impl Rectangle {
+    pub fn area(&self) -> f64 { self.width * self.height }
+}
+```
+
+这不只是语法上的"把方法挪到外面"。分离意味着你可以为一个 struct 写多个 `impl` 块（分布在不同的文件/模块中），也可以独立控制每个方法和每个字段的可见性。当你为某个 trait 写 `impl` 时，trait 方法与自身方法自然地隔离在不同 `impl` 块中——一目了然。
+
+### 2. 方法接收者：显式 self vs 隐式 this
+
+C++ 的方法隐式携带 `this` 指针，你不需要在签名中声明它：
+
+```cpp
+class Rectangle {
+public:
+    double area() const { return width * height; }
+    // const 修饰符表示 this 是 const Rectangle*，但不显式出现
+};
+```
+
+Rust 要求你**显式声明**方法的接收者：
+
+```rust
+impl Rectangle {
+    pub fn area(&self) -> f64 { self.width * self.height }
+    // &self 是显式的——等价于 self: &Self
+    pub fn scale(&mut self, factor: f64) { self.width *= factor; }
+    // &mut self 表示可变借用
+    pub fn into_parts(self) -> (f64, f64) { (self.width, self.height) }
+    // self 获取所有权，调用后原变量不可用
+}
+```
+
+Rust 不提供编译时隐式修改的 `const` 修饰符——`&self` vs `&mut self` 在类型层面就区分了只读和可写。更重要的是，`self`（所有权转移）在 C++ 中没有直接对应——C++ 的"移动语义"需要 `std::move` + 右值引用，而 Rust 将所有权作为语言的一等概念嵌入到了方法签名中。
+
+### 3. 没有类继承体系
+
+C++ 的核心 OOP 机制基于继承——你可以从一个基类派生，获得它的字段和方法，再通过虚函数实现多态：
+
+```cpp
+class Shape {
+public:
+    virtual double area() const = 0;
+    virtual ~Shape() = default;
+};
+class Circle : public Shape { ... };
+class Rectangle : public Shape { ... };
+```
+
+Rust **没有类继承**。你不能定义一个 struct "继承自"另一个 struct。Rust 使用两种替代手段来达成代码复用和多态：
+
+- **组合（Composition）**：一个 struct 包含另一个 struct 的实例作为字段。
+- **Trait**：定义共享的行为接口，任何类型可以独立实现它们。通过 `dyn Trait` 实现动态分发，通过泛型 + trait bound 实现静态分发。
+
+```rust
+trait Shape {
+    fn area(&self) -> f64;
+}
+
+struct Circle { radius: f64 }
+impl Shape for Circle {
+    fn area(&self) -> f64 { std::f64::consts::PI * self.radius.powi(2) }
+}
+
+struct Rectangle { width: f64, height: f64 }
+impl Shape for Rectangle {
+    fn area(&self) -> f64 { self.width * self.height }
+}
+```
+
+这种设计避免了 C++ 继承体系的经典痛点——菱形继承、虚基类、运行时开销难以预测等问题。trait 让接口和实现保持正交：任何类型在任何地方都可以实现一个 trait，而不需要修改类型的原始定义。trait 的深入讲解将在后续章节展开，眼下只需记住：**Rust 用组合承载数据，用 trait 承载行为——两者各司其职，互不侵入**。
+
 ## 常见错误
 
 ### 9.1 忘记 `pub`

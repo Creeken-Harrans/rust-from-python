@@ -763,6 +763,30 @@ JSON 文件不是数据库，缺乏：
 
 ---
 
+## 从 Python、C、C++ 迁移时值得注意的设计差异
+
+### 1. 用 Enum 而非字符串常量表示任务状态
+
+Python 中常用字符串常量 `"pending"`、`"done"` 或布尔值 `is_completed` 表示状态。C 中用 `#define` 或整型枚举常量。Rust 的枚举是"代数数据类型"，每个变体可以携带数据，且编译器强制穷尽匹配。本项目虽用 `bool` 表示 `completed` 字段（因为状态简单），但 `Commands` 枚举展示了更重要的用法：六个子命令各为一个变体，变体可携带参数（`Add { title: Vec<String> }`）。`match` 分发时，编译器确保你覆盖了所有命令。Python 中用 `if/elif` 链分发命令，忘记处理某个命令是运行时 bug；在 Rust 中这是编译错误。
+
+### 2. 依赖管理通过 Cargo 而非 pip install
+
+Python 项目用 `pip install` 或 `requirements.txt` 管理依赖，依赖安装到全局或虚拟环境，版本锁定需要 `pip freeze` 生成锁止文件。Rust 的 Cargo 在项目级别声明依赖（`Cargo.toml`），自动解析版本冲突，生成 `Cargo.lock` 锁定精确版本。本项目的 `serde`、`serde_json`、`clap` 三个依赖，一行配置即可，`cargo build` 自动下载并编译所有传递依赖。关键优势：依赖是项目级别的（非全局），同一份 `Cargo.lock` 在任何机器上编译出相同的二进制——这在 Python 生态中需要虚拟环境加锁文件配合才能近似做到。
+
+### 3. 业务逻辑放 `lib.rs` 以提升可测试性
+
+Python 项目中常把所有逻辑（数据处理 + CLI 交互）混在一个脚本里，测试 CLI 工具需要模拟 `sys.argv` 或使用 `subprocess`。Rust 社区约定将核心逻辑放在 `lib.rs` 作为库暴露，`main.rs` 只做参数解析和调用。本项目遵循此模式：`TodoList` 及其所有 CRUD 方法在 `lib.rs` 中定义，`main.rs` 仅负责 `clap` 解析和命令分发。好处是测试可以直接 `use todo_cli::TodoList`，不经过 CLI 层，测试更稳定、更快速，且能访问所有的公开 API —— 这在纯 Python CLI 脚本中需要额外重构才能实现。
+
+### 4. `clap` 的编译期 CLI 验证 vs argparse 的运行时解析
+
+Python 的 `argparse` 在运行时解析参数，选项名称拼写错误或参数类型不匹配只有执行到那个路径才会发现。Rust 的 `clap` derive 模式通过 `#[derive(Parser)]` 和 `#[derive(Subcommand)]` 宏在编译期生成解析代码，子命令名、参数类型都在编译期验证。本项目中 `Commands` 枚举定义了六个子命令，`Complete { id: u32 }` 中的 `u32` 类型确保 ID 参数必须在编译期就是可解析为无符号整数的——这比运行时 `int()` 转换健壮得多。更重要的是，`--help` 文档也是自动从结构体定义生成的，不可能出现文档与代码不同步的问题。
+
+### 5. `serde` 的零模板序列化 vs 手动字典构建
+
+Python 中序列化对象到 JSON 通常需要手动构建字典列表，或使用 `json.dumps(obj.__dict__)`（有安全隐患）。C/C++ 中更复杂，需要手写解析器或引入 protobuf 等重量级框架。Rust 的 `serde` + `#[derive(Serialize, Deserialize)]` 两个 derive 宏即可让 `TodoItem` 和 `TodoList` 获得完整的 JSON 序列化/反序列化能力，支持嵌套结构，编译期保证正确性。它不需要运行时反射（Python 的基础），序列化/反序列化代码在编译期生成，性能接近手写。
+
+---
+
 ## 附录 A：依赖版本说明
 
 | Crate       | 版本 | 用途                           |

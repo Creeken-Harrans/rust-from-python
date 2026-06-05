@@ -587,6 +587,31 @@ cargo run     # 编译并运行
 
 ---
 
+## Cargo 与 C/C++ 构建工具简要对照
+
+如果你有 C 或 C++ 的开发经验，你很可能对以下场景并不陌生：选择一个编译器（GCC、Clang、MSVC 三者甚至更多），选择一个构建系统（Make、CMake、Meson、Bazel、Ninja……），再选择一套依赖管理方案（系统包管理器 `apt`/`brew`、`vcpkg`、`Conan`、或直接将第三方源码放入 `vendor/` 目录）。这些工具各司其职，但彼此之间的整合往往需要手工配置和团队约定。
+
+Rust 的 Cargo 在设计上的核心决策之一是**将上述职责统一到一个工具中**。它并非试图覆盖所有复杂的构建场景，而是为绝大多数 Rust 项目的常见工作流提供开箱即用的体验：
+
+| 工作流 | C/C++ 生态的常见做法 | Cargo 的做法 |
+|--------|--------------------|-------------|
+| 编译 | `gcc` / `clang++` 手动调用或通过 Makefile | `cargo build` |
+| 运行 | 编译后手动执行 `./a.out` | `cargo run` |
+| 测试 | CTest / Google Test / Catch2 等独立框架 | `cargo test`（统一内置） |
+| 文档生成 | Doxygen / Sphinx 等独立工具 | `cargo doc`（统一内置） |
+| 代码格式化 | clang-format（独立安装调用） | `cargo fmt`（通过 rustfmt 组件集成） |
+| 静态检查 | cppcheck / clang-tidy（独立安装调用） | `cargo clippy`（通过 clippy 组件集成） |
+| 依赖管理 | Conan / vcpkg / 手动管理 | `Cargo.toml` 的 `[dependencies]` + crates.io |
+| 项目初始化 | 手工创建目录和配置文件 | `cargo new` / `cargo init` |
+
+这种统一带来的好处是**团队认知成本低**：在任何 Rust 项目中，`cargo build` 的行为都是可预期的，不需要先阅读 Makefile 或 CMakeLists.txt 来理解项目的构建逻辑。对于初学者而言，这意味着你可以立刻开始写代码，而不需要先学习一套构建系统的 DSL。
+
+但需要客观指出，Cargo 并非银弹。对于需要交叉编译多个语言、定制编译流程（如集成汇编代码、生成代码再编译、精确控制链接顺序）的复杂场景，CMake 等工具的灵活性和成熟度仍然有优势。Rust 生态也提供了 `build.rs` 构建脚本和 `cc` crate 等机制来应对这些需求，但在极端定制的工程中，你仍然可能需要混合使用 Cargo 与其他构建工具。
+
+对于从 Python 进入 Rust 的读者，你可以将 Cargo 理解为 `pip + setuptools + venv + pytest + Sphinx + black + ruff` 的组合体——但更重要的是，Cargo 提供的不仅仅是一组工具的拼接，而是一套自上而下的一致性体验。无论你在阅读 [第 00 章](../00_course_orientation/) 的课程导览，还是后续 [第 02 章](../02_variables_and_types/) 的类型系统，`cargo` 命令的用法都是相通且可预期的。
+
+---
+
 ## 常见错误
 
 ### 错误 1: 忘记保存文件就运行 cargo
@@ -703,7 +728,7 @@ error[E0596]: cannot borrow `s` as mutable, as it is not declared as mutable
 - **函数**: 参数、返回值、表达式与语句的区别
 - **所有权 (Ownership) 初探**: Rust 最核心的内存管理机制
 
-准备好了吗？让我们进入第 2 章——**Rust 类型系统与所有权**。
+准备好了吗？让我们进入 [第 02 章](../02_variables_and_types/)——**Rust 类型系统与所有权**。
 
 ---
 

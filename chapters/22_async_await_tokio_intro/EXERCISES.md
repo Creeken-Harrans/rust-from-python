@@ -308,3 +308,21 @@ cargo test
 ---
 
 **练习的目的是加深对 Rust 异步模型的理解。如果遇到困难，回顾 README 中的概念讲解，尤其是 Future 的惰性本质和运行时的工作方式。**
+
+---
+
+## 迁移思维练习
+
+> 以下问题帮助你思考 Python asyncio 的异步模型如何重新理解 Rust 的 async/await。
+
+### 问题 1：Python asyncio 和 Rust async/await 的关键区别在哪里？
+
+Python 的 async/await 构建在一个内置的事件循环（event loop）之上——`asyncio.run()` 启动一个全局的事件循环，所有协程都在其中调度。Rust 的 async/await 则把运行时的选择留给了库（Tokio、async-std、smol 等），语言本身只定义了 `Future` trait 和 `.await` 语法。这种"语言不绑定运行时"的设计有什么优势？它又带来了什么代价（比如你需要手动选择 Runtime）？另外，Python 的协程在创建后就开始执行，Rust 的 Future 在被 `.await` 之前是惰性的——这种差异在实际编码中会怎样影响你的代码结构？
+
+**提示**：Rust 把 async 视为一种"零成本抽象"——编译器将 async fn 编译为状态机，运行时只负责 poll 和 wake，不参与代码生成。
+
+### 问题 2：什么任务适合 async，什么任务适合多线程？
+
+你已经学过了第 21 章的多线程和本章的 async——两者都可以实现并发。对于一个需要同时处理 1000+ 个网络连接的服务器，为什么 async 模型比"每个连接一个线程"更高效？反过来，对于一个 CPU 密集型任务（如视频编码或科学计算），为什么应该使用 `spawn_blocking` 或将任务交给线程池，而不是在 async 上下文中直接计算？如果 async 任务中不小心执行了一个长时间的同步操作，会对整个运行时产生什么影响？
+
+**提示**：async 适用于 I/O 密集场景——大部分时间在"等待"；CPU 密集任务会阻塞运行时线程，阻碍其他 async 任务被 poll，应该通过 `spawn_blocking` 分离到线程池中执行。

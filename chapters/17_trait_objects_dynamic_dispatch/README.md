@@ -92,6 +92,119 @@ let n: Box<dyn Notifier> = Box::new(EmailNotifier::new("a@b.com"));
 
 ---
 
+## 多态机制的跨语言对比
+
+Rust 的 trait 对象和动态分派机制并非凭空出现——C 和 C++ 长期以来一直在使用类似的技术解决运行时多态问题。了解这些技术的演进，有助于理解 Rust 设计背后的取舍。
+
+**C 语言：函数指针与手工虚表**
+
+C 语言没有内置的多态机制，但程序员可以通过函数指针手动实现类似效果：
+
+```c
+// C: 手工构造 vtable
+typedef struct {
+    void (*notify)(void* self, const char* msg);
+    const char* (*name)(void* self);
+} NotifierVtable;
+
+typedef struct {
+    const NotifierVtable* vtable;
+    // ... 具体数据字段 ...
+} Notifier;
+```
+
+这种方式被称为"手工 vtable"模式，在 Linux 内核（如 `file_operations` 结构体）、GLib 对象系统等大型 C 项目中广泛使用。它的缺点显而易见：完全没有类型安全检查，函数签名错误在编译期无法发现，`void*` 丢失所有类型信息，一旦 vtable 指针被错误覆盖就会导致难以调试的崩溃。
+
+**C++：虚函数与继承**
+
+C++ 在语言层面提供了运行时分派的支持：
+
+- `virtual` 关键字标记的方法通过 vtable 实现动态分派
+- 编译器自动为包含虚函数的类生成 vtable
+- 基类指针/引用指向派生类对象时，通过 vtable 间接调用正确的实现
+- `override` 关键字提供编译期验证
+
+```cpp
+// C++: 虚函数实现运行时多态
+class Notifier {
+public:
+    virtual void notify(const std::string& msg) = 0;  // 纯虚函数
+    virtual std::string name() const = 0;
+    virtual ~Notifier() = default;  // 虚析构函数是必须的
+};
+
+std::vector<std::unique_ptr<Notifier>> notifiers;  // 可存储不同子类的异构集合
+```
+
+C++ 的虚函数解决了 C 手工 vtable 的许多安全问题，但也带来了新问题：
+- 虚析构函数容易忘记声明——通过基类指针 `delete` 派生类对象时，非虚析构函数导致资源泄漏或未定义行为
+- **切片问题（slicing）**——值传递基类对象时，派生类特有数据被静默丢弃
+- 多重继承导致 vtable 布局复杂化，指针调整带来额外开销
+- 没有"这个类能否安全用作基类"的编译期检查
+
+**Rust 的 `dyn Trait`：显式动态分派**
+
+Rust 的 trait 对象吸收了 C 和 C++ 的经验教训，提供了更安全的运行时多态：
+
+- **显式性**：`dyn` 关键字明确标记"这里是动态分派"，读者和编译器都能清晰识别
+- **无继承耦合**：trait 对象不依赖类继承树，任何实现了 trait 的类型都可以作为 trait 对象——组合优于继承
+- **对象安全规则**：编译器强制检查 trait 是否能安全用作 trait 对象（见[对象安全](#对象安全-object-safety)节）
+- **胖指针而非单指针**：`&dyn Trait` 是 16 字节的胖指针（数据指针 + vtable 指针），避免了 C++ 中"基类指针通过偏移指向派生类"的切片陷阱和多重继承的指针调整问题
+- **所有权清晰**：Drop 自动通过 vtable 调用，无需手写虚析构函数
+
+**静态分派 vs 动态分派的核心差异**
+
+| 维度 | 静态分派（泛型） | 动态分派（trait 对象） |
+|------|----------------|---------------------|
+| 分派时机 | 编译时（单态化，生成类型专用副本） | 运行时（通过 vtable 查表） |
+| 调用开销 | 零开销，可被内联优化 | vtable 间接调用（约 1-2ns），无法内联 |
+| 二进制体积 | 较大（每个具体类型生成一份代码） | 较小（一份通用代码 + 各类型虚表） |
+| 集合中混合类型 | ❌ 不允许（`Vec<T>` 中 T 必须统一） | ✅ 允许（`Vec<Box<dyn Trait>>` 可混入不同实现） |
+| 适用场景 | 同类型批量高性能操作、数值计算 | 异构集合、插件系统、依赖注入、GUI 组件 |
+
+**Trait 对象的使用形式**
+
+Trait 对象通常通过引用或智能指针使用——因为 `dyn Trait` 是动态大小类型（DST），不能直接放在栈上：
+
+| 形式 | 所有权 | 典型使用场景 |
+|------|--------|------------|
+| `&dyn Trait` | 不可变借用 | 函数参数，仅读取不获取所有权 |
+| `&mut dyn Trait` | 可变借用 | 需要在调用期间修改内部状态 |
+| `Box<dyn Trait>` | 独占所有权 | 异构集合元素、工厂函数返回值、需要转移所有权的场景 |
+| `Rc<dyn Trait>` | 共享所有权（单线程） | 多个持有者引用同一 trait 对象 |
+| `Arc<dyn Trait>` | 共享所有权（线程安全） | 多线程间共享 trait 对象 |
+
+其中 `Box<dyn Trait>` 是最常用的形式——它在堆上分配具体对象，`Box` 本身作为胖指针（16 字节：8 字节数据指针 + 8 字节 vtable 指针）可以被放在栈上或 Vec 中。
+
+**并非所有 Trait 都能成为 Trait 对象**
+
+这是 Rust 与 C++ 的一个重要区别——Rust 编译器强制检查**对象安全（object safety）**规则：
+
+- trait 方法不能有泛型参数（vtable 无法为每种 T 穷举条目）
+- 方法不能返回 `Self`（返回类型大小在编译时无法确定）
+- 有关联常量或关联类型的 trait 在某些情况下受限制
+
+```rust
+// ❌ 不对象安全
+trait Clone {
+    fn clone(&self) -> Self;  // 返回 Self —— 编译时未知具体返回类型
+}
+// fn foo(x: &dyn Clone) {} // 编译错误！
+
+// ✅ 对象安全
+trait Notifier {
+    fn notify(&self, msg: &str);  // &self，无泛型参数，返回具体类型
+}
+```
+
+通过 `where Self: Sized` 可以排除不对象安全的方法，使 trait 恢复对象安全（详见[对象安全](#对象安全-object-safety)节）。这种编译期检查避免了 C++ 中"用抽象类实例化对象"或"调用已析构对象的虚函数"等未定义行为。
+
+> **与 Python 的对照**：Python 的鸭子类型在运行时通过 `__dict__` 查找方法，没有编译期检查——如果对象缺少某个方法，调用时抛出 `AttributeError`。Rust 的 trait 对象在编译时保证所有方法都存在，通过 vtable 在运行时高效分派，兼顾了安全性和性能。
+>
+> 关于 `String` 与 `&str` 的区分及其与所有权系统的关系，参见[第 10 章：集合类型](../10_collections_vec_string_hashmap/README.md)。关于 Rust 模块系统、可见性控制以及 `use` 与 `#include` 的本质区别，参见[第 13 章：包、箱与模块系统](../13_packages_crates_modules_visibility/README.md)。
+
+---
+
 ## 动态分派：vtable 虚表原理
 
 ### 什么是动态分派
@@ -700,6 +813,8 @@ for n in &notifiers {
 - Rust 的 trait 系统在编译时保证所有实现了 trait 的类型都有对应的方法
 - Python 不需要显式的 `Box` —— 所有对象都是堆分配的"引用语义"
 - Rust 需要显式选择值语义 vs 引用语义，trait 对象需要指针包装
+
+> **跨章节参考**：关于 Rust 字符串（`String` / `&str`）的所有权与借用，参见[第 10 章：集合类型](../10_collections_vec_string_hashmap/README.md)。关于模块系统的 `use` 与 `mod` 关键字，参见[第 13 章：包、箱与模块系统](../13_packages_crates_modules_visibility/README.md)。
 
 ---
 

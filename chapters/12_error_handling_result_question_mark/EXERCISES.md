@@ -311,3 +311,21 @@ fn load_user_data() -> Vec<User> {
 - [thiserror crate](https://crates.io/crates/thiserror) — 简化自定义错误定义
 - [anyhow crate](https://crates.io/crates/anyhow) — 灵活的应用级错误处理
 - [The Error Design Patterns in Rust](https://github.com/rust-lang/project-error-handling)
+
+---
+
+## 迁移思维练习
+
+> 以下问题帮助你思考 C 的错误码模式和 Python 的异常机制如何重新建模为 Rust 的 Result<T, E>。
+
+### 问题 1：C 中用返回 -1 表示错误的函数，改为 Rust 应该返回什么？
+
+在 C/POSIX 编程中，很多函数通过返回 -1 表示错误，同时设置全局 `errno` 来传递错误详情。调用方需要写 `if (fd == -1) { perror(...); }` 这种模式，但编译器不会强制你检查返回值——你可以若无其事地继续使用无效的 fd。如果你将同一个语义迁移到 Rust，`Result<File, std::io::Error>` 对比 `(fd, errno)` 的模式有什么根本优势？调用方如何被强制处理错误路径？
+
+**提示**：Result 是一个枚举，编译器强制执行穷尽性匹配——你必须同时处理 Ok 和 Err 两个分支，否则编译不通过。
+
+### 问题 2：Python 的 try/except 逻辑如何用 Result<T, E> + ? 重新表达？
+
+Python 中你可能会写三层嵌套的 try/except：最外层尝试打开文件，中间层解析 JSON，最内层访问某个键。如果在 Rust 中做同样的操作（文件 I/O、JSON 解析、字段访问），你如何用 `?` 运算符将三层错误的传播扁平化？？`?` 运算符在传播错误时会自动做类型转换（通过 `From` trait），这和 Python 的异常链（`raise ... from ...`）在信息传递上有什么异同？
+
+**提示**：`?` 是"遇到错误就提前返回"的语法糖，它隐藏了 match/return 样板代码；`From` trait 实现了错误类型的自动向上转换，类似 Python 中的异常包装但发生在编译期。

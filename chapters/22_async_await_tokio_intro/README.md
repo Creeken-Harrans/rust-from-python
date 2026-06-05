@@ -684,6 +684,169 @@ let result = client.get("https://api.example.com")
 
 ---
 
+## Python、C 与 C++ 对照
+
+如果你有其他语言的异步编程经验，这一节会帮助你建立概念对照，同时明确 Rust 异步的独特之处。
+
+### Python asyncio：事件循环、协程与 await
+
+Python 的 `asyncio` 是标准库内置的异步框架，与 Rust 异步有以下可对照之处：
+
+- **事件循环（Event Loop）**：`asyncio.run()` 启动事件循环，负责调度协程和处理 I/O 回调。这与 Tokio 运行时的角色相似，但 Python 事件循环是**标准库的一部分**，而 Rust 的运行时是"外置"的第三方库。
+- **协程（Coroutine）**：`async def` 返回协程对象，惰性执行。关键区别在于：Python 中 `asyncio.create_task()` 会**立即调度**协程执行；而 Rust 中 `tokio::spawn()` 提交的 Future 仍然惰性，需要运行时 poll 才开始。
+- **await**：Python 使用前缀 `await`，Rust 使用后缀 `.await`。两者都是协作式的让出点——在等待 I/O 时将控制权交还给调度器。
+
+**局限类比**：Python asyncio 可以帮助你理解"挂起/恢复"的基本思想，但 Rust 的 Future 是**完全惰性**的（比 Python 协程更彻底），且 Rust 默认多线程运行时，Python asyncio 默认单线程。
+
+### C++ 协程（C++20）：co_await 与 co_return
+
+C++20 引入了无栈协程，与 Rust 的异步设计有一定相似性：
+
+- **`co_await`**：挂起当前协程，等待 awaitable 对象就绪——与 Rust `.await` 的角色一致
+- **`co_return`**：完成协程并返回最终值——对应 Rust Future 的 `Poll::Ready(value)`
+- **无栈协程**：编译器将协程体转换为状态机——与 Rust `async fn` 的编译策略一致
+- **外部驱动**：C++ 协程依赖 `promise_type` 和 `coroutine_handle`，由外部代码推进——类似 Rust 的 `Future::poll()` + 运行时
+
+**局限类比**：C++ 协程的底层控制能力更强，但学习曲线极为陡峭（需要理解 `promise_type`、`await_suspend`、对称/非对称转移等底层概念）。Rust 的 `async fn` + `.await` 语法糖将状态机复杂性隐藏在编译器之后。此外，C++ 标准库只提供了协程的基础设施，缺少类似 Tokio 这样的生产级异步运行时生态。
+
+### Rust Future：惰性求值是核心差异
+
+Rust 的 `Future` 设计理念与 Python/C++ 有一个根本性的区别——**绝对的惰性求值**：
+
+- **Python**：协程惰性，但 `create_task` 后立即调度执行
+- **C++**：协程创建后立即运行到第一个挂起点（eager start）
+- **Rust**：Future 创建后**什么都不做**——没有副作用，没有进度，没有调度
+
+```rust
+let f = some_async_fn();  // 创建 Future，零副作用
+// f 只是一个"执行计划"，代码还没有运行
+f.await;                   // .await 才开始 poll
+```
+
+这种设计的优势在于：Future 可以作为值自由传递、组合、缓存甚至丢弃，而不会产生意外副作用。代价是：如果你忘了 `.await`（或将其提交给运行时），代码永远不会运行。编译器通常只会给出 `unused_must_use` 警告，某些上下文中甚至没有提示。
+
+### 运行时：调度器、I/O 驱动与任务执行器
+
+异步运行时本质上是一个**三重引擎**：
+
+1. **调度器（Scheduler）**：决定哪些 Future 可以 poll，以什么顺序 poll
+2. **I/O 驱动（I/O Driver）**：与操作系统异步 I/O 接口交互——Linux 上的 epoll、macOS 上的 kqueue、Windows 上的 IOCP
+3. **任务执行器（Task Executor）**：管理线程池，实际执行就绪的 Future
+
+**重要**：Tokio 是 Rust 生态中最流行的运行时，但它**不是 Rust 标准库的一部分**。这与 Go（goroutine 是语言内置）、Python（asyncio 是标准库）、JavaScript（浏览器/Node.js 隐式事件循环）形成鲜明对比。Rust 将运行时"外置"，换取零成本抽象、嵌入式友好和生态竞争。
+
+### .await：挂起当前任务，让出控制权
+
+`.await` 的工作流程：
+
+1. 注册 Future 到运行时（通过 `Context` 中的 `Waker`）
+2. 调用 `future.poll()` 尝试推进状态机
+3. 若返回 `Poll::Pending`：**挂起**当前 Future，保存状态，控制权交还运行时——线程可以处理其他任务
+4. 若返回 `Poll::Ready(value)`：获取结果，继续执行 `.await` 之后的代码
+
+关键理解：`.await` 挂起的是**当前异步任务**，不是操作系统线程。线程仍在工作——只是换了另一个就绪的 Future。这正是异步模型能以少量线程管理数万并发连接的根本原因。
+
+### Async 不是"更快的线程"
+
+这是一个必须澄清的误区。异步**不是**线程的高性能替代品，它们是面向不同问题的不同工具：
+
+- **异步是一种调度策略**：适用于大量任务反复等待 I/O 的场景。等待期间线程不闲置，可以切换到其他任务，从而在少量线程上管理海量并发。
+- **线程是一种执行资源**：每个线程拥有独立的栈空间和执行上下文，由操作系统抢占式调度。
+
+异步不会让你的单个函数跑得更快。如果瓶颈是 CPU 计算，异步的状态机生成、Waker 通知和调度开销反而可能拖慢性能。
+
+### I/O 密集型 vs CPU 密集型：不同场景需要不同策略
+
+| 场景类型 | 瓶颈 | 最佳策略 | 典型示例 |
+|---------|------|---------|---------|
+| I/O 密集型 | 等待外部资源（网络/磁盘/数据库） | async | Web 服务器、API 网关、爬虫、数据库代理 |
+| CPU 密集型 | 计算能力 | 线程池 / rayon | 图像处理、加密解密、科学计算、视频编码 |
+| 混合型 | 两者兼有 | async + spawn_blocking | HTTP 请求接收 + 图片缩略处理 |
+
+---
+
+## 关键澄清
+
+以下是理解 Rust 异步编程**必须牢记**的要点——许多初学者在这些地方反复踩坑。
+
+### 1. async fn 返回 Future——调用它不会执行
+
+```rust
+async fn compute() -> i32 { 42 }
+
+let f = compute();  // 返回 impl Future<Output = i32>，函数体什么都没执行
+// f 只是一个"配方"，还没开始"烹饪"
+let result = f.await;  // .await 驱动 poll，现在才开始执行
+```
+
+编译器对忘记 `.await` 的检查有限——多数情况只产生 `unused_must_use` 警告，某些上下文中甚至没有提示。这是初学者最容易犯的错误。
+
+### 2. Future 需要执行器/运行时来 poll
+
+孤立的 Future 什么也做不了。它必须被一个执行器（executor）反复调用 `poll()` 方法才能推进。Tokio 运行时承担的就是这个角色。没有运行时，Future 只是一段被冻结的状态机。
+
+### 3. .await 挂起，不阻塞——线程可以处理其他任务
+
+- **挂起（Suspend）**：当前 Future 暂停，**线程可以切换去处理其他 Future**
+- **阻塞（Block）**：操作系统线程陷入等待，**无法处理任何其他任务**
+
+```rust
+// 挂起——线程可以去处理其他 Future，不浪费 CPU
+tokio::time::sleep(Duration::from_secs(1)).await;  // 正确
+
+// 阻塞——线程空转 1 秒，该线程上所有其他任务全部被卡住
+std::thread::sleep(Duration::from_secs(1));  // 严重错误！
+```
+
+### 4. 不要在 async 任务中直接运行阻塞操作
+
+在异步上下文中调用 `std::thread::sleep`、大文件的 `std::fs::read`（同步版本）、或其他阻塞函数，会阻塞整个工作线程。在多线程运行时中其他线程可能仍可运作；但在单线程运行时（`current_thread`）中，整个应用将完全停滞。
+
+### 5. CPU 密集型工作：使用 spawn_blocking 或专用线程池
+
+```rust
+// 将计算密集任务卸到阻塞线程池，不占用 async 工作线程
+let result = tokio::task::spawn_blocking(|| {
+    expensive_computation()  // 可能运行数秒甚至数分钟
+}).await.unwrap();
+```
+
+`spawn_blocking` 的线程池（默认上限 512 线程）与 async 工作线程池**完全独立**。即使所有 async 工作线程都在忙碌，`spawn_blocking` 任务仍然可以在专用线程上推进。
+
+### 6. Tokio 是生态，不是语言标准库
+
+Tokio 并非 Rust 语言的一部分。标准库 `std::future::Future` 只定义了 trait 接口。你可以选择：
+- **Tokio**：功能最全，社区最大，Web 服务和通用 I/O 的首选
+- **async-std**：API 更贴近 std，学习曲线平缓
+- **smol**：轻量级，适合简单或嵌入式场景
+- **自定义**：如果标准运行时不符合需求，可以从零实现
+
+### 7. Async 不是普遍更快——CPU 密集场景用线程更优
+
+| 场景 | 异步表现 | 线程表现 | 结论 |
+|------|---------|---------|------|
+| 10,000 个 HTTP 长连接 | 几个线程高效管理 | 需 10,000 线程（内存爆炸） | Async 完胜 |
+| 并行矩阵乘法 | 无优势（本质是计算，无等待） | 每核心一线程，线性加速 | 线程完胜 |
+| Web API + 图片缩放 | Async 接收请求；spawn_blocking 处理 | 可行但资源浪费 | 组合最优 |
+
+---
+
+## 异步 vs 多线程对比
+
+| 维度 | 异步 | 多线程 |
+|------|------|--------|
+| 适用场景 | I/O 密集 | CPU 密集 |
+| 切换成本 | 极低（状态机跳转，纳秒级） | 较高（上下文切换、缓存失效、内核态切换） |
+| 并发模型 | 协作式（任务在 .await 处主动让出） | 抢占式（操作系统强制切换，时间片耗尽） |
+| 内存开销 | 按任务（每个 Future 状态机大小，通常几十到几百字节） | 按线程栈（Linux 默认 8 MB/线程，可调但仍以 KB 计） |
+| 调度粒度 | 每个 .await 点（微秒级） | 时间片（通常 1-10 ms） |
+| 编程模型 | async/await + Future trait | 共享内存 + 锁 / 消息传递（channel） |
+| 竞态风险点 | 仅在 .await 点之间（协作式，可预测） | 任意时刻（抢占式，除非加锁） |
+| 可伸缩性 | 数万到数十万并发任务 | 数百到数千线程（受内存和调度开销限制） |
+| Rust 工具链 | Tokio, async-std, smol | std::thread, rayon, crossbeam |
+
+---
+
 ## 运行本章代码
 
 ### 前提条件
@@ -761,3 +924,7 @@ RUST_LOG=tokio=debug cargo run
 ---
 
 **异步编程是 Rust 中最具挑战性但也最强大的特性之一。理解 Future 的惰性本质和运行时的角色，是掌握 Rust 异步编程的关键。**
+
+---
+
+> 📚 **相关章节**：[18 闭包迭代器](../18_closures_iterators/) | [21 线程与并发](../21_threads_channels_shared_state/) | [12 错误处理](../12_error_handling_result_question_mark/)

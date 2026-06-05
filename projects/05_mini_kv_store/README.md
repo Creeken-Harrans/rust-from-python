@@ -758,6 +758,34 @@ username|alice
 
 ---
 
+## 从 Python、C、C++ 迁移时值得注意的设计差异
+
+### 1. `Result` 贯穿全部 API，而非全局错误码
+
+C 语言中函数通过返回值（`NULL`、`-1`）表示错误，具体原因需检查全局变量 `errno`，且 `errno` 在多次系统调用间可能被覆盖。C++ 的异常可以跨越多个调用栈层次，但异常安全的代码编写复杂（RAII、noexcept）。Python 的异常同样可以跨越栈帧，但"哪些函数可能抛出什么异常"完全依赖文档而非类型系统。Rust 的方案是：每个可能失败的操作返回 `Result<T, E>`，编译器强制调用方处理。本项目从 `KvStore::open` 到 `save`、`load`，所有 I/O 操作都返回 `Result<_, Box<dyn Error>>`，调用方用 `?` 简洁传播或用 `match` 精确处理。不存在"忘记检查 errno"或"漏接异常"的问题。
+
+### 2. 所有权决定存储数据用 `String` 而非 `&str`
+
+Python 中所有字符串都是对象，赋值和传参都是引用计数操作，程序员不需要思考"数据归谁所有"。C 中 `char*` 可以指向栈、堆或静态区的内存，谁负责释放是永恒的难题。Rust 迫使我们做出清晰决议：`KvStore` 的 `data: HashMap<String, String>` —— 键和值都是 `String`，表示存储层拥有数据的所有权。`set(&mut self, key: String, value: String)` 取 `String` 而非 `&str`，表示"我会接管这些数据"。同时，`get(&self, key: &str) -> Option<&String>` 返回引用，让调用者零拷贝读取但不必担心内存释放。这种设计在 C 中需要大量注释来传达意图，在 Rust 中函数签名自己就是最准确的文档。
+
+### 3. 枚举表达状态优于布尔标志和魔数
+
+C 中用 `int` 常量（如 `#define STATE_OK 0`）表示状态，任何 `int` 都能通过编译期检查，实际可能传入非法值。C++ 和 Python 的枚举提供了类型安全标签，但不能携带数据。Rust 的枚举是完整的"和类型"：本项目虽未直接使用复杂枚举，但其 `Option<&String>` 返回类型本身就是枚举的力量——它明确区分了"key 存在且有值"和"key 不存在"，无需使用 `None`/`NULL` 哨兵或额外布尔返回值。如果你扩展本项目来支持过期键，可以用 `enum EntryState { Active(String), Expired, Tombstone }` 替代三个布尔标志的混乱组合，编译器会确保你处理了所有可能状态。
+
+### 4. Cargo 统一管理所有依赖并锁定版本
+
+Python 项目的依赖管理常常分散在 `requirements.txt`、`setup.py` 和 `pyproject.toml` 之间，版本锁定需要手动维护锁止文件。C 项目依赖系统包管理器（apt、brew）或 CMake 的 `find_package`，跨平台一致性脆弱。Rust 的 Cargo 一个工具解决：`Cargo.toml` 声明语义化版本，`cargo build` 自动解析依赖树，生成 `Cargo.lock` 锁定精确版本（保证可复现构建）。本项目零外部依赖（纯标准库），但如果要升级存储格式到 JSON（引入 `serde`），只需在 `Cargo.toml` 加一行 `serde_json = "1"`，编译时自动下载——无需任何系统级安装步骤。
+
+### 5. `BufReader` 逐行读取的显式控制
+
+Python 的 `for line in open('file')` 自动提供缓冲和逐行迭代，这是极好的体验，但缓冲策略和内存分配对用户完全不透明。Rust 需要显式创建 `BufReader::new(File::open(...)?)` 来获得缓冲读取，略显冗长但带来了精确的控制——你知道每一步的内存分配和 I/O 策略。本项目的 `load` 方法逐行解析 `key|value` 格式，格式错误打印警告继续解析，这是"容错加载"的范例。Python 可以做到同样的事，但 Rust 额外的收获是：`File::open` 返回 `Result`，`line_result?` 传播 I/O 错误，每一步的类型都告诉你"这里可能失败，需要处理"。
+
+### 6. 不存在 null 指针：`Option<T>` 的普遍使用
+
+C 和 C++ 中大量使用 `NULL`/`nullptr` 表示"没有值"，但编译器不会强制你检查——忘记判空是段错误的第一大来源。Python 用 `None`，虽然有 `AttributeError` 但只能在运行时发现。Rust 没有 null：本项目 `get(&self, key: &str) -> Option<&String>` 返回 `Option`，调用方必须处理 `Some` 和 `None` 两种情况。`HashMap::remove` 同样返回 `Option<String>`。编译器强制你检查——如果你试图直接解包 `Option` 而不处理 `None`，代码无法编译。这个设计消除了 Tony Hoare 称为"价值十亿美元的错误"（null reference）在 Rust 中的存在空间。
+
+---
+
 ## 总结
 
 本项目通过构建一个麻雀虽小五脏俱全的本地 KV 存储，实践了 Rust 的以下核心概念：

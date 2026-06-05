@@ -447,6 +447,30 @@ A: `thread::spawn` 返回的 `JoinHandle` 的 `join()` 方法会返回 `Err`，�
 
 ---
 
+## 从 Python、C、C++ 迁移时值得注意的设计差异
+
+### 1. 线程生成时的显式所有权转移
+
+Python 的 `threading.Thread(target=fn, args=(data,))` 中，`data` 的传递依赖运行时引用计数和 GIL 保护。C 的 `pthread_create` 通过 `void*` 传参，类型信息丢失，且需要手动管理内存生命周期。Rust 的 `thread::spawn(move || ...)` 中，`move` 关键字将闭包中变量的所有权显式移入新线程。本项目中每条样本数据（`name: String`、`text: String`）通过 `move` 移入工作线程，编译器保证主线程此后不再使用这些数据——这从根本上杜绝了"主线程释放了数据而子线程还在使用"的悬垂引用问题。C 中这是最头疼的 bug 来源之一，Python 中由 GIL 掩盖但降低了并发度。
+
+### 2. `Arc<Mutex<T>>` 替代 GIL 保护共享可变状态
+
+Python 的 GIL 使得多线程中访问共享字典（如 `global_dict[key] += 1`）在字节码层面看似安全（实际上仍有竞态机会）。C++ 的 `std::mutex` 和 `std::lock_guard` 是手动模式，可能忘记加锁或死锁。Rust 将互斥锁与数据绑定：`Mutex<HashMap<String, usize>>` 意味着"要访问这个 HashMap，必须先获取锁"。本项目的方案 B 中，`Arc::clone` 共享数据，`freq.lock().unwrap()` 获取守卫——守卫离开作用域时自动释放锁（RAII）。更重要的是，编译器不会让你绕过 Mutex 直接访问内部数据，这在 C++ 中仅靠代码审查纪律保证。
+
+### 3. 通道提供类型安全的线程间消息传递
+
+Python 的 `queue.Queue` 可以放入任意类型，读取后需要 `isinstance` 检查。C 中通过 `pipe` 或共享内存通信，需要手动约定二进制协议。Rust 的 `mpsc::channel::<Result<FileStats, String>>()` 在编译时就确定了通道中传输的类型。本项目的 worker 线程发送 `Result<FileStats, String>`，主线程接收后直接 `match`——不涉及类型转换、不涉及协议解析。发送后所有权转移给通道，worker 不能再访问 `stats`，避免了"发送后误改数据"的问题。Go 程序员会对这种类型安全的 channel 感到熟悉，但 Rust 额外保证了发送端析构后接收端的 for 循环会自动终止（因为 `drop(tx)` 触发关闭）。
+
+### 4. 编译器在编译期防止数据竞争
+
+这是 Rust 并发模型最根本的差异。Python 依赖 GIL 防止解释器层面的数据竞争，但逻辑竞争仍然存在，且在释放 GIL 的 C 扩展中无效。C/C++ 依赖 sanitizer（如 ThreadSanitizer）在运行时检测数据竞争，成本高且依赖充分测试覆盖。Rust 的 `Send` 和 `Sync` trait 在编译期验证：任何跨线程传递的类型必须实现 `Send`，任何跨线程共享引用的类型必须实现 `Sync`。如果你尝试将 `Rc<T>`（非 `Send`）传入线程，编译器会直接报错并精确指出问题所在。本项目中没有一处显式使用 `Send`/`Sync` 标注，但编译器在后台自动检查了每个 `thread::spawn` 和 `channel.send` 的类型安全性。
+
+### 5. 单线程与多线程对照的性能测量
+
+Python 的多线程受 GIL 限制，CPU 密集型任务往往不如单线程，性能分析常用 `time.perf_counter()`。C 中用 `clock_gettime` 等系统调用。Rust 的 `std::time::Instant` 提供单调时钟，配合 `--release` 编译可获得真实性能数据。本项目同时实现了单线程版本和两种多线程方案（消息传递、共享状态），可以直接对比三种模式的耗时。在 release 模式下，你可以观察到数据量超过一定阈值后多线程带来的真实加速——这与 Python 中多线程的"虚假加速"形成鲜明对比。
+
+---
+
 ## 总结
 
 本项目通过一个实际的并行文本统计任务，系统地演示了 Rust 并发编程的核心概念：

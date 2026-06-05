@@ -206,6 +206,28 @@ json_support = ["serde", "serde_json"]
 
 这种方式让你的 crate 可以保持轻量，使用者只需引入需要的依赖。一个典型的例子是 `reqwest`：默认不依赖 TLS 库，用户可以根据需要选择 `native-tls` 或 `rustls` feature。
 
+### Cargo vs C/C++ 依赖管理
+
+从 C/C++ 生态转向 Rust 的开发者会立刻感受到 Cargo 依赖管理的巨大便利：
+
+**C/C++ 的传统方式**：C/C++ 没有语言级别的统一包管理器。开发者通常依赖系统包管理器（apt、brew）、手动下载源码、或使用 CMake 的 `FetchContent` / `find_package`。这导致：
+- 不同平台、不同环境的依赖版本不一致
+- 传递性依赖的版本解析需要开发者手工处理
+- 头文件和库文件的路径配置繁琐且不可移植
+- 每个项目的构建方式可能完全不同，缺乏统一的描述格式
+
+Conan 和 vcpkg 等第三方包管理器改善了这一问题，但它们不是语言标准的一部分，采用率有限，且与构建系统的集成深度远不如 Cargo。
+
+**Cargo 的方式**：Cargo 从语言基础设施层面提供了统一的解决方案：
+- `Cargo.toml` 声明依赖和 SemVer 版本约束，`Cargo.lock` 锁定精确版本，确保可重现构建
+- 自动解析和下载传递性依赖，自动处理版本冲突
+- 同一套配置在 Linux、macOS、Windows 上均能工作
+- Feature 系统提供了条件编译和可选依赖的原生支持
+
+**SemVer 与 Cargo.lock**：SemVer（语义化版本）是 Rust 生态的版本约定基石——`MAJOR.MINOR.PATCH` 格式分别对应破坏性变更、向后兼容的新功能、向后兼容的修复。`Cargo.lock` 则锁定整个依赖树的精确版本和来源 hash，确保团队成员和 CI 环境构建出完全相同的二进制产物。对二进制项目，Cargo.lock 必须提交到版本控制；对库项目，也越来越多地被推荐提交以提升 CI 可重现性。
+
+Cargo 并非完美——大型项目的编译时间、依赖膨胀、以及 `target/` 目录的磁盘占用是常被提及的问题——但它将 C/C++ 生态中需要手动管理的复杂性自动化到了语言基础设施层面，这是 Rust 工程体验的核心优势之一。
+
 ## Feature 系统
 
 ### Feature 是什么
@@ -284,6 +306,51 @@ fn any_output_format() { }
 - `cfg!` 展开为 `true` 或 `false`，被包裹的代码始终需要能通过编译检查
 
 因此，当某些代码引用了仅在特定 feature 下才存在的类型或函数时，必须使用 `#[cfg]` 而不是 `cfg!`。
+
+### Feature 的设计哲学
+
+理解 Feature 的本质对于设计良好的 crate 至关重要。以下是几个容易被忽视但至关重要的原则：
+
+**Feature 是编译时能力选择，不是运行时配置**
+
+Feature 通过 `#[cfg]` 在编译期决定哪些代码被编译、哪些依赖被链接。一旦编译完成，生成的二进制文件已经"固化"了 feature 的选择——用户无法在运行时切换 feature。这意味着：
+- 如果你的功能需要运行时切换（如不同的序列化格式），应使用配置结构体、环境变量或命令行参数，而不是 feature。
+- Feature 控制的代码差异是结构性的——一个 feature 可能改变类型定义、添加或移除方法、引入额外依赖。这些无法在运行时动态调整。
+
+**Feature 应保持可组合（Additive）**
+
+Feature 系统的隐含约定是 additive：启用更多 feature 只应增加功能，不应移除或改变已有行为。违反这一定律会导致"feature 组合爆炸"——当 N 个 feature 之间存在交互时，测试所有组合的工作量是 2^N：
+
+```toml
+# 好的设计：feature 是累加的，任意组合都正确
+[features]
+default = ["std"]
+std = []              # 使用标准库
+serde = ["dep:serde"] # 添加序列化支持
+async = ["dep:tokio"] # 添加异步支持
+# 用户启用任意组合都正常工作
+```
+
+**不要将 Feature 建模为互斥状态机**
+
+将 feature 设计为互斥的（如 `backend-mysql` 和 `backend-postgres` 不能同时启用）是常见反模式：
+
+```toml
+# 反模式：互斥 feature 没有编译期保障
+[features]
+backend-mysql = ["dep:mysql"]
+backend-postgres = ["dep:postgres"]
+# 用户同时启用两个 feature 时会发生什么？静默的未定义行为？
+```
+
+当确实需要互斥选择时（如 TLS 后端、加密实现），至少应在编译时通过 `compile_error!` 宏给出清晰提示：
+
+```rust
+#[cfg(all(feature = "backend-mysql", feature = "backend-postgres"))]
+compile_error!("backend-mysql 和 backend-postgres 不能同时启用");
+```
+
+但更根本的解决思路是：将互斥的选择建模为 trait + 泛型参数，让使用者在类型层面做出选择，而不是在 feature 层面互斥。相对于 feature 的组合爆炸，泛型的单态化在编译期就能覆盖所有代码路径。经验法则：如果你的 feature 之间存在"非 A 即 B"的关系，停下来思考——这通常意味着抽象层次需要调整。
 
 ## Profile 配置
 
@@ -496,7 +563,10 @@ cargo yank --vers 0.1.0 --undo  # 取消撤回
 3. **避免 feature 爆炸**：不要在单个 crate 中定义过多 feature（通常不超过 10-15 个），必要时考虑拆分 crate
 4. **文档化 features**：在 README 和文档注释中清楚说明每个 feature 的作用
 5. **使用 feature 依赖**：当 feature A 总是需要 feature B 时，让 A 依赖 B 以简化用户配置
-6. **互斥 feature 使用编译错误**：使用 `#[cfg(not(...))]` 配合 `compile_error!` 宏在用户误用时给出清晰提示
+6. **互斥 feature 使用编译错误**：当确实需要互斥 feature 时，使用 `#[cfg(all(feature = "A", feature = "B"))]` 配合 `compile_error!` 宏在用户误用时给出清晰提示。但更好的做法是重新审视设计——互斥 feature 往往是抽象层次需要调整的信号，考虑使用 trait + 泛型参数替代互斥 feature。
+7. **Feature 是编译时概念**：不要将 feature 用于运行时行为切换。运行时配置应使用配置结构体、环境变量或 CLI 参数。Feature 控制的代码路径在编译后不可更改，用户无法通过配置文件来"开启"一个 feature。
+8. **保持 feature 的累加性**：每个 feature 应只添加功能，不应删除或改变已有行为。当一个 feature 的行为依赖于另一个 feature 是否也被启用时（即 feature 之间有"交互"），设计已经偏离了 feature 系统的初衷。
+9. **关注 feature 的传递效应**：你的 crate 的 feature 会通过依赖图传播。启用一个看似"轻量"的 feature，可能因为它内部启用了依赖的"重量" feature，导致最终二进制体积膨胀。使用 `cargo tree --edges features` 审查 feature 的实际影响。
 
 ### 依赖管理建议
 
@@ -562,3 +632,5 @@ Cargo 是 Rust 生态的核心基础设施，它提供的工程能力远超一�
 - [Profiles Documentation](https://doc.rust-lang.org/cargo/reference/profiles.html)
 - [Semantic Versioning](https://semver.org/)
 - [crates.io](https://crates.io/)
+- 相关章节：[第18章 — 闭包与迭代器](../18_closures_iterators/README.md) — 使用 feature 为迭代器实现提供条件编译
+- 相关章节：[第20章 — 资源管理 Drop/Deref](../20_resource_management_drop_deref/README.md) — profile 的 release 优化如何影响 Drop 的执行
