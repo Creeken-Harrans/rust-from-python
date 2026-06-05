@@ -1,4 +1,4 @@
-#![allow(clippy::vec_init_then_push, clippy::empty_line_after_doc_comments), rustdoc::invalid_html_tags)]
+#![allow(clippy::vec_init_then_push, clippy::empty_line_after_doc_comments, rustdoc::invalid_html_tags)]
 // ============================================================================
 // 特征对象与动态分派 (Trait Objects & Dynamic Dispatch)
 // ============================================================================

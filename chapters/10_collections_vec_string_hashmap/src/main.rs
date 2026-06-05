@@ -1,7 +1,8 @@
 #![allow(
     clippy::approx_constant,
     clippy::unnecessary_sort_by,
-    clippy::vec_init_then_push
+    clippy::vec_init_then_push,
+    rustdoc::invalid_html_tags
 )]
 use std::collections::HashMap;
 
