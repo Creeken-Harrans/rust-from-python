@@ -4,10 +4,10 @@ Rust 标准库提供了几种最常用的集合类型（Collections），用于�
 
 ## 目录
 
-1. [Vec`<T>` —— 动态数组](#1-vect--动态数组)
-2. [String —— 可增长的 UTF-8 字符串](#2-string--可增长的-utf-8-字符串)
-3. [HashMap`<K, V>` —— 键值对映射](#3-hashmapk-v--键值对映射)
-4. [三种迭代器：iter / iter_mut / into_iter](#4-三种迭代器iter--iter_mut--into_iter)
+1. [Vec`<T>` —— 动态数组](#1-vect-动态数组)
+2. [String —— 可增长的 UTF-8 字符串](#2-string-可增长的-utf-8-字符串)
+3. [HashMap`<K, V>` —— 键值对映射](#3-hashmapk-v-键值对映射)
+4. [三种迭代器：iter / iter_mut / into_iter](#4-三种迭代器iter-iter_mut-into_iter)
 5. [所有权与集合类型](#5-所有权与集合类型)
 6. [Python 对比速查](#6-python-对比速查)
 7. [常见错误与修复](#7-常见错误与修复)

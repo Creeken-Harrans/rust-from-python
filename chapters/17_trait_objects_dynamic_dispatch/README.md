@@ -10,7 +10,7 @@
 2. [dyn Trait 语法](#dyn-trait-语法)
 3. [动态分派：vtable 虚表原理](#动态分派vtable-虚表原理)
 4. [静态分派 vs 动态分派 对比](#静态分派-vs-动态分派-对比)
-5. [Box\<dyn Trait\> —— 最常用的形式](#boxdyn-trait--最常用的形式)
+5. [Box\<dyn Trait\> —— 最常用的形式](#boxdyn-trait-最常用的形式)
 6. [对象安全 (Object Safety)](#对象安全-object-safety)
 7. [何时使用：enum vs 泛型 vs trait 对象](#何时使用enum-vs-泛型-vs-trait-对象)
 8. [真实世界的应用场景](#真实世界的应用场景)

@@ -380,10 +380,10 @@ fn main() {
     println!("Tweet.author()         → {}", tweet.author());
     println!("BlogPost.author()      → {}", blog.author());
 
-    section("DisplayInfo 特征 (全覆盖实现)");
+    section("DisplayInfo 特征 (独立实现)");
 
-    // 因为全覆盖实现: impl<T: Summary + Debug> DisplayInfo for T
-    // NewsArticle / Tweet / BlogPost 都自动获得了 info()
+    // NewsArticle / Tweet / BlogPost 各自由独立的 impl DisplayInfo for ... 提供 info()
+    // 注意：全覆盖实现 (blanket impl) 因与独立实现冲突而置于注释区（见文件上方）
     println!("NewsArticle.info():\n{}", article.info());
     println!("Tweet.info():\n{}", tweet.info());
     println!("BlogPost.info():\n{}", blog.info());
@@ -398,7 +398,7 @@ fn main() {
     section("泛型函数 generate_detailed_report<T: Summary + DisplayInfo + Debug>");
 
     // generate_detailed_report 要求 T: Summary + DisplayInfo + Debug
-    // DisplayInfo 通过全覆盖实现已经提供，所以三个类型都满足
+    // 三个类型均通过独立的 impl DisplayInfo for ... 满足此约束
     println!("{}", generate_detailed_report(&article));
     println!("{}", generate_detailed_report(&tweet));
     println!("{}", generate_detailed_report(&blog));
@@ -514,7 +514,7 @@ fn main() {
          1. 定义特征 (trait): Summary, DisplayInfo\n\
          2. 为结构体实现特征: impl Summary for NewsArticle/Tweet/BlogPost\n\
          3. 默认特征方法: Summary::summarize() 有默认实现\n\
-         4. 全覆盖实现 (Blanket Impl): impl<T: Summary+Debug> DisplayInfo for T\n\
+         4. 特征的多重实现: 多个类型各自实现 DisplayInfo（全覆盖实现见注释区）\n\
          5. 泛型函数 + 特征约束: fn generate_report<T: Summary>(&T)\n\
          6. where 子句: fn generate_detailed_report<T>(&T) where T: Summary + DisplayInfo\n\
          7. impl Trait 语法: fn notify(&impl Summary)\n\

@@ -5,11 +5,11 @@
 ## 目录
 
 1. [什么是智能指针](#什么是智能指针)
-2. [Box\<T\> — 堆分配](#boxt--堆分配)
+2. [Box\<T\> — 堆分配](#boxt-堆分配)
 3. [Deref 与 Drop trait](#deref-与-drop-trait)
-4. [Rc\<T\> — 引用计数](#rct--引用计数)
-5. [RefCell\<T\> — 内部可变性](#refcellt--内部可变性)
-6. [Rc\<RefCell\<T\>\> — 共享可变数据](#rcrefcellt--共享可变数据)
+4. [Rc\<T\> — 引用计数](#rct-引用计数)
+5. [RefCell\<T\> — 内部可变性](#refcellt-内部可变性)
+6. [Rc\<RefCell\<T\>\> — 共享可变数据](#rcrefcellt-共享可变数据)
 7. [引用循环与 Weak\<T\>](#引用循环与-weakt)
 8. [类型选择速查表](#类型选择速查表)
 9. [重要概念澄清](#重要概念澄清)

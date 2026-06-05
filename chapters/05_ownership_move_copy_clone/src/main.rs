@@ -79,7 +79,7 @@ fn demonstrate_clone() {
     let v1 = vec![1, 2, 3, 4, 5];
     let v2 = v1.clone(); // Vec 也支持 Clone
 
-    println!("v1 = {:?}", v2);
+    println!("v1 = {:?}, v2 = {:?}", v1, v2);
     println!("v1.len() = {}, v2.len() = {}", v1.len(), v2.len());
     println!();
 }

@@ -18,7 +18,7 @@
     - [7.7 结构体更新语法](#77-结构体更新语法)
     - [7.8 字段初始化简写](#78-字段初始化简写)
 8. [与 Python 的对照](#与-python-的对照)
-    - [8.1 Python class vs Rust struct + impl](#81-python-class-vs-rust-struct--impl)
+    - [8.1 Python class vs Rust struct + impl](#81-python-class-vs-rust-struct-impl)
     - [8.2 `__init__` vs `new()`](#82-__init__-vs-new)
     - [8.3 self 参数对比](#83-self-参数对比)
     - [8.4 综合对照表](#84-综合对照表)

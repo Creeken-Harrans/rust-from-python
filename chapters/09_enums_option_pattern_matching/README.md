@@ -8,7 +8,7 @@
 
 1. [问题引入：没有 null 的语言如何表达"可能没有值"](#1-问题引入没有-null-的语言如何表达可能没有值)
 2. [Python 视角：你熟悉的 None 和 match](#2-python-视角你熟悉的-none-和-match)
-3. [Rust 的设计：Enum + Option + 模式匹配](#3-rust-的设计enum--option--模式匹配)
+3. [Rust 的设计：Enum + Option + 模式匹配](#3-rust-的设计enum-option-模式匹配)
 4. [核心规则](#4-核心规则)
 5. [完整代码示例](#5-完整代码示例)
 6. [常见错误与陷阱](#6-常见错误与陷阱)
@@ -250,6 +250,8 @@ while let Some(item) = iterator.next() {
 ---
 
 ## 5. 完整代码示例
+
+> **说明**：本节为教学示例，部分函数（如 `describe_status`、`get_domain`）为概念插图，与 `src/main.rs` 中的 `Display` impl、`get_email_domain`、`must_find_user` 等实际代码在命名上有所不同，但覆盖全部核心概念。建议配合 `src/main.rs` 运行对照学习。
 
 ### 5.1 基础枚举与 Option
 

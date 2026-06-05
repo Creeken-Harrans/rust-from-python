@@ -14,7 +14,7 @@
 3. [可恢复错误：Result<T, E>](#3-可恢复错误resultt-e)
 4. [使用 match 处理 Result](#4-使用-match-处理-result)
 5. [unwrap() 与 expect()](#5-unwrap-与-expect)
-6. [? 运算符](#6--运算符)
+6. [? 运算符](#6-运算符)
 7. [错误传播模式](#7-错误传播模式)
 8. [自定义错误类型](#8-自定义错误类型)
 9. [From trait 与自动错误转换](#9-from-trait-与自动错误转换)

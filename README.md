@@ -115,14 +115,29 @@ chapters/XX_chapter_name/
 ├── tests/              # 测试（部分章节）
 ├── README.md           # 📖 主要学习材料（从这里开始！）
 ├── EXERCISES.md        # ✏️ 练习题
-└── SOLUTIONS.md        # 💡 参考答案（部分章节）
+├── SOLUTIONS.md        # 💡 参考答案
+├── examples/           # 📦 可运行参考示例（部分章节）
+└── broken_examples/    # ⚠️ 故意错误示例（学习对照）
 ```
 
-**推荐阅读顺序**：
+**推荐学习流程**：
 1. 先运行 `cargo run -p <package_name>` 看输出
 2. 再读 `README.md` 理解概念
 3. 然后看源码，对照讲解
-4. 最后做 `EXERCISES.md` 中的练习
+4. 独立完成 `EXERCISES.md` 中的练习
+5. 使用 `cargo check` 或 `cargo test` 验证自己的代码
+6. 对比 `SOLUTIONS.md` 参考答案，分析设计决策差异
+7. 重新独立实现，巩固理解
+
+## 练习与参考答案
+
+每章提供：
+- `EXERCISES.md`：结构化练习题（基础 → 组合 → 设计思考）
+- `SOLUTIONS.md`：完整参考答案（含思路、实现、设计分析）
+- `examples/`：部分章节提供可独立运行的教学示例
+- `broken_examples/`：隔离保存的错误示例，说明编译器保护了什么
+
+**建议使用方式**：先独立完成练习，再阅读答案。参考答案用于比较思路和设计决策，不代表所有题目只有一种正确写法。对于代码题，建议先比较思路，再自行重新实现，而不是直接复制。
 
 ---
 
